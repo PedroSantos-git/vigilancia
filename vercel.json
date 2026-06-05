@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/auth/:nextauth*",
+      "destination": "/api/auth/[...nextauth].js?nextauth=:nextauth*"
+    }
+  ]
+}

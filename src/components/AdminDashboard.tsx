@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import React, { useState } from 'react';
 import { Language, Teacher, Room, Exam, Allocation, NotificationLog } from '../types';
 import { translations } from '../translations';
 import { 
@@ -14,9 +15,13 @@ import {
   RefreshCcw, 
   Trash2, 
   CheckCircle,
-  Bell
+  Bell,
+  MessageSquare,
+  Send,
+  Loader2
 } from 'lucide-react';
 import { hasSubjectConflict, getPeriodFromTime } from '../utils/scheduler';
+import { api } from '../utils/api';
 
 interface AdminDashboardProps {
   lang: Language;
@@ -40,6 +45,38 @@ export default function AdminDashboard({
   onClearAllocations
 }: AdminDashboardProps) {
   const t = translations[lang];
+
+  // AI Assistant State
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiResponse, setAiResponse] = useState('');
+  const [isAiLoading, setIsAiLoading] = useState(false);
+
+  const handleAskAI = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!aiPrompt.trim()) return;
+
+    setIsAiLoading(true);
+    setAiResponse('');
+
+    try {
+      const context = {
+        teachersCount: teachers.length,
+        roomsCount: rooms.length,
+        examsCount: exams.length,
+        allocationsCount: allocations.length,
+        exams: exams.map(e => ({ name: e.name, date: e.date, subject: e.subject })),
+        conflictsCount: 0 // Will be updated if we pass actual conflicts
+      };
+
+      const res = await api.ai.ask(aiPrompt, context);
+      setAiResponse(res.text || 'Desculpe, não consegui processar o seu pedido.');
+    } catch (error) {
+      console.error('AI error:', error);
+      setAiResponse('Ocorreu um erro ao comunicar com o assistente Gemini AI.');
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
 
   // Logic Calculations
   const totalTeachers = teachers.length;
@@ -149,6 +186,57 @@ export default function AdminDashboard({
             <span>{t.clearAllocations}</span>
           </button>
         </div>
+      </div>
+
+      {/* AI Assistant Section */}
+      <div className="bg-gradient-to-br from-blue-900/10 to-indigo-900/10 border border-blue-200/50 rounded-2xl p-6 shadow-sm">
+        <div className="flex items-center space-x-2 mb-4">
+          <div className="bg-blue-600 p-1.5 rounded-lg shadow-lg shadow-blue-500/20">
+            <Sparkles className="h-4 w-4 text-white" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-slate-800">
+              {lang === 'pt' ? 'Assistente de Planeamento Gemini AI' : 'Gemini AI Planning Assistant'}
+            </h3>
+            <p className="text-[10px] text-slate-500 font-medium">
+              {lang === 'pt' 
+                ? 'Peça ajuda para otimizar horários ou analisar conflitos complexos.' 
+                : 'Ask for help optimizing schedules or analyzing complex conflicts.'}
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={handleAskAI} className="relative mb-4">
+          <input
+            type="text"
+            value={aiPrompt}
+            onChange={(e) => setAiPrompt(e.target.value)}
+            placeholder={lang === 'pt' ? "Ex: Analisa a distribuição de vigilâncias e sugere melhorias..." : "Ex: Analyze invigilation distribution and suggest improvements..."}
+            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition shadow-sm"
+          />
+          <button
+            type="submit"
+            disabled={isAiLoading || !aiPrompt.trim()}
+            className="absolute right-2 top-2 p-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-blue-600/20"
+          >
+            {isAiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          </button>
+        </form>
+
+        {aiResponse && (
+          <div className="bg-white/80 border border-blue-100 rounded-xl p-4 text-sm text-slate-700 leading-relaxed shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="flex items-start space-x-3">
+              <div className="mt-1 bg-slate-100 p-1 rounded">
+                <MessageSquare className="h-3 w-3 text-slate-500" />
+              </div>
+              <div className="prose prose-sm max-w-none">
+                {aiResponse.split('\n').map((line, i) => (
+                  <p key={i} className="mb-2 last:mb-0">{line}</p>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Grid statistics cards */}

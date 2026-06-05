@@ -47,5 +47,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(notification)
     }).then(r => r.json()),
+  },
+  ai: {
+    ask: (prompt: string, context: any) => fetch(`${API_BASE}/gemini`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, context })
+    }).then(r => r.json()),
   }
 };

@@ -1,5 +1,13 @@
 -- Database schema for Exam Vigilance Management
 
+CREATE TABLE IF NOT EXISTS AuthorizedUsers ( 
+   id SERIAL PRIMARY KEY, 
+   email TEXT UNIQUE NOT NULL, 
+   name TEXT, 
+   role TEXT DEFAULT 'admin', 
+   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() 
+ );
+
 CREATE TABLE IF NOT EXISTS teachers (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,

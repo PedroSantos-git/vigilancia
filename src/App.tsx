@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useSession, signOut } from "next-auth/react";
 import { 
   Teacher, 
   Room, 
@@ -101,11 +102,26 @@ export default function App() {
   const [notificationsLog, setNotificationsLog] = useState<NotificationLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Authentication session
+  // NextAuth Session
+  const { data: nextSession, status: nextStatus } = useSession();
+
+  // Authentication session (compatibility with legacy local auth)
   const [session, setSession] = useState<UserSession | null>(() => {
     const saved = localStorage.getItem('v_session');
     return saved ? JSON.parse(saved) : null;
   });
+
+  // Sync NextAuth session to our local session state
+  useEffect(() => {
+    if (nextStatus === 'authenticated' && nextSession?.user) {
+      const userSession: UserSession = {
+        role: (nextSession.user as any).role || 'admin',
+        email: nextSession.user.email || '',
+        name: nextSession.user.name || '',
+      };
+      setSession(userSession);
+    }
+  }, [nextSession, nextStatus]);
 
   // Active Screen / Tab option: dashboard, teachers, rooms, exams, schedule, reports, backup
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -147,6 +163,9 @@ export default function App() {
 
   // LOGOUT
   const handleLogout = () => {
+    if (nextStatus === 'authenticated') {
+      signOut();
+    }
     setSession(null);
     setActiveTab('dashboard');
   };
