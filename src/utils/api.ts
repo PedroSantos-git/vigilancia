@@ -54,5 +54,14 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt, context })
     }).then(r => r.json()),
+  },
+  users: {
+    getAll: () => fetch(`${API_BASE}/users`).then(r => r.json()),
+    save: (user: { email: string, name: string, role?: string }) => fetch(`${API_BASE}/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(user)
+    }).then(r => r.json()),
+    delete: (email: string) => fetch(`${API_BASE}/users?email=${email}`, { method: 'DELETE' }).then(r => r.json()),
   }
 };

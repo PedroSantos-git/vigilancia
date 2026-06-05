@@ -29,6 +29,7 @@ import ReportManager from './components/ReportManager';
 import BackupLogs from './components/BackupLogs';
 import NotificationCenter from './components/NotificationCenter';
 import ExamRoomManager from './components/ExamRoomManager';
+import UserManager from './components/UserManager';
 
 // Icons
 import { 
@@ -42,7 +43,8 @@ import {
   CloudLightning, 
   LogOut, 
   Globe,
-  Layers
+  Layers,
+  Lock
 } from 'lucide-react';
 
 import { SchoolShipIcon } from './components/SchoolLogo';
@@ -595,17 +597,31 @@ export default function App() {
             
             {/* Tab: Dashboard only for Admin */}
             {session.role === 'admin' && (
-              <button
-                onClick={() => setActiveTab('dashboard')}
-                className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                  activeTab === 'dashboard' 
-                    ? 'bg-blue-50 text-blue-800 border-l-4 border-blue-600' 
-                    : 'text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                <Shield className="h-4 w-4" />
-                <span>{t.tabDashboard}</span>
-              </button>
+              <>
+                <button
+                  onClick={() => setActiveTab('dashboard')}
+                  className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                    activeTab === 'dashboard' 
+                      ? 'bg-blue-50 text-blue-800 border-l-4 border-blue-600' 
+                      : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <Shield className="h-4 w-4" />
+                  <span>{t.tabDashboard}</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('users')}
+                  className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                    activeTab === 'users' 
+                      ? 'bg-blue-50 text-blue-800 border-l-4 border-blue-600' 
+                      : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <Lock className="h-4 w-4" />
+                  <span>{lang === 'pt' ? 'Acessos' : 'Access Control'}</span>
+                </button>
+              </>
             )}
 
             {/* Tab: Teachers */}
@@ -811,6 +827,12 @@ export default function App() {
                   onClearAllocations={handleClearAllocationsAll}
                 />
               )}
+
+              {activeTab === 'users' && session.role === 'admin' && (
+                 <UserManager
+                   lang={lang}
+                 />
+               )}
 
               {activeTab === 'teachers' && (
                 <TeacherManager
