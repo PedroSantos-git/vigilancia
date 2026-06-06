@@ -60,63 +60,96 @@ export default function AdminDashboard({
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const handleImportMapaGeral = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+     const file = e.target.files?.[0];
+     if (!file) return;
+ 
+     setIsImporting(true);
+     const reader = new FileReader();
+ 
+     reader.onload = async (evt) => {
+       try {
+         const bstr = evt.target?.result;
+         const wb = XLSX.read(bstr, { type: 'binary' });
+         const ws = wb.Sheets["Mapa Geral"];
+         
+         if (!ws) {
+           alert(lang === 'pt' ? 'Folha "Mapa Geral" não encontrada no Excel!' : '"Mapa Geral" sheet not found in Excel!');
+           setIsImporting(false);
+           return;
+         }
+ 
+         const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+         
+         const importedTeachers: any[] = [];
+         const importedExams: any[] = [];
+         const importedRoles: any[] = [];
+         const roleNamesSet = new Set<string>();
 
-    setIsImporting(true);
-    const reader = new FileReader();
+         // Helper para converter "terça 16 de junho" para "2026-06-16"
+         const parsePortugueseDate = (str: string) => {
+           if (!str) return "";
+           const clean = str.toLowerCase();
+           const dayMatch = clean.match(/(\d{1,2})/);
+           if (!dayMatch) return "";
+           
+           const day = dayMatch[1].padStart(2, '0');
+           const year = new Date().getFullYear(); // 2026 neste contexto
+           
+           let month = "06"; // Default Junho
+           if (clean.includes("janeiro")) month = "01";
+           else if (clean.includes("fevereiro")) month = "02";
+           else if (clean.includes("março")) month = "03";
+           else if (clean.includes("abril")) month = "04";
+           else if (clean.includes("maio")) month = "05";
+           else if (clean.includes("junho")) month = "06";
+           else if (clean.includes("julho")) month = "07";
+           else if (clean.includes("agosto")) month = "08";
+           else if (clean.includes("setembro")) month = "09";
+           else if (clean.includes("outubro")) month = "10";
+           else if (clean.includes("novembro")) month = "11";
+           else if (clean.includes("dezembro")) month = "12";
+           
+           return `${year}-${month}-${day}`;
+         };
+ 
+         // 1. Encontrar Exames (Procurar na linha 6 e acima)
+         // O row 4 ou 5 contém a data (mesclada em várias colunas)
+         // O row 6 contém a hora e o nome do exame
+         let lastValidDate = "";
+         
+         for (let col = 4; col < data[5]?.length; col++) {
+           const examCell = data[5][col]; // Linha 6 (index 5)
+           
+           // Tentar achar a data no row acima (linha 4 ou 5) para esta coluna específica
+           // Como as células são mescladas, a data aparece na primeira coluna do grupo
+           const potentialDate4 = data[3]?.[col] ? String(data[3][col]).trim() : "";
+           const potentialDate5 = data[4]?.[col] ? String(data[4][col]).trim() : "";
+           const dateFound = potentialDate4 || potentialDate5;
+           
+           if (dateFound) {
+             lastValidDate = parsePortugueseDate(dateFound);
+           }
 
-    reader.onload = async (evt) => {
-      try {
-        const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
-        const ws = wb.Sheets["Mapa Geral"];
-        
-        if (!ws) {
-          alert(lang === 'pt' ? 'Folha "Mapa Geral" não encontrada no Excel!' : '"Mapa Geral" sheet not found in Excel!');
-          setIsImporting(false);
-          return;
-        }
-
-        const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
-        
-        const importedTeachers: any[] = [];
-        const importedExams: any[] = [];
-        const importedRoles: any[] = [];
-        const roleNamesSet = new Set<string>();
-
-        // 1. Encontrar Exames (Procurar na linha 6 e acima)
-        // Estrutura: Data na linha 4/5, Hora e Nome na linha 6
-        // Percorrer colunas a partir da coluna E (index 4)
-        for (let col = 4; col < data[5]?.length; col++) {
-          const examCell = data[5][col]; // Linha 6 (index 5)
-          if (examCell && typeof examCell === 'string' && examCell.includes('(')) {
-            // Tentar achar a data no row acima (linha 5)
-            let dateStr = "";
-            for (let r = 4; r >= 0; r--) {
-              if (data[r][col]) {
-                dateStr = String(data[r][col]).trim();
-                break;
-              }
-            }
-
-            // Exemplo: "8:45 Português Língua Não Materna (839)"
-            const timeMatch = examCell.match(/(\d{1,2}:\d{2})/);
-            const time = timeMatch ? timeMatch[1] : "09:00";
-            const name = examCell.replace(time, '').trim();
-            const subject = name.split('(')[0].trim();
-            
-            importedExams.push({
-              id: `ex_${col}`,
-              name: name,
-              subject: subject,
-              date: dateStr || "2026-06-15", // Fallback
-              time: time
-            });
-          }
-        }
-
-        // 2. Encontrar Teachers (A partir da linha 7)
+           if (examCell && typeof examCell === 'string' && examCell.includes('(')) {
+             // Exemplo: "8:45 Português Língua Não Materna (839)"
+             const timeMatch = examCell.match(/(\d{1,2}:\d{2})/);
+             const time = timeMatch ? timeMatch[1] : "09:00";
+             
+             // Limpeza do nome e disciplina
+             const fullName = examCell.replace(time, '').trim();
+             const subjectOnly = fullName.split('(')[0].trim();
+             
+             importedExams.push({
+               id: `ex_${col}_${lastValidDate}`,
+               name: fullName,
+               subject: subjectOnly,
+               date: lastValidDate || "2026-06-15",
+               time: time
+             });
+           }
+         }
+ 
+         // 2. Encontrar Teachers (A partir da linha 7)
         for (let row = 6; row < data.length; row++) {
           const groupCell = data[row][0]; // Coluna A
           const nameCell = data[row][1];  // Coluna B
