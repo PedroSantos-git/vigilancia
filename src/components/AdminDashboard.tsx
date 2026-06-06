@@ -155,6 +155,12 @@ export default function AdminDashboard({
           roles: importedRoles
         });
 
+        if (result.error) {
+          alert(`Erro na importação: ${result.error}\n\nDetalhe: ${result.detail || 'N/A'}\n\nSugestão: ${result.hint || ''}`);
+          setIsImporting(false);
+          return;
+        }
+
         alert(lang === 'pt' 
           ? `Importação concluída: ${result.stats.teachers} professores e ${result.stats.exams} exames.` 
           : `Import finished: ${result.stats.teachers} teachers and ${result.stats.exams} exams.`);

@@ -54,7 +54,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     });
   } catch (error: any) {
-    console.error('Import error:', error);
-    return res.status(500).json({ error: error.message || 'Internal Server Error' });
+    console.error('Import error detail:', error);
+    return res.status(500).json({ 
+      error: 'Internal Server Error during import',
+      detail: error.message,
+      hint: 'Certifique-se de que correu /api/init-db para criar as tabelas.'
+    });
   }
 }

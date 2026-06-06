@@ -41,8 +41,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.setHeader('Allow', ['GET', 'POST', 'DELETE']);
         return res.status(405).end(`Method ${method} Not Allowed`);
     }
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: 'Internal Server Error' });
+  } catch (error: any) {
+    console.error('Roles API error:', error);
+    return res.status(500).json({ 
+      error: 'Internal Server Error',
+      detail: error.message,
+      hint: 'Verifique se a tabela teacher_roles existe correndo /api/init-db'
+    });
   }
 }
