@@ -40,7 +40,13 @@ export default function RoleManager({ lang }: RoleManagerProps) {
     try {
       setIsLoading(true);
       const data = await api.roles.getAll();
-      setRoles(data);
+      if (Array.isArray(data)) {
+        setRoles(data);
+      } else {
+        console.error('API returned non-array for roles:', data);
+        setRoles([]);
+        setError(lang === 'pt' ? 'Erro ao processar dados dos cargos.' : 'Error processing roles data.');
+      }
     } catch (err) {
       console.error('Error fetching roles:', err);
       setError(lang === 'pt' ? 'Erro ao carregar cargos.' : 'Error loading roles.');
