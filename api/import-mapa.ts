@@ -6,10 +6,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { teachers, exams, roles } = req.body;
+  const { teachers, exams, roles, confirmReplace } = req.body;
 
   try {
-    // 1. Process Roles (Insert or Ignore)
+    if (!confirmReplace) {
+      return res.status(400).json({
+        error: 'Confirmation required',
+        detail: 'A importacao do Mapa Geral apaga os professores e exames atuais antes de inserir os novos dados.'
+      });
+    }
+
+    // 1. Limpar dados dependentes antes da nova importacao
+    await sql`DELETE FROM allocations`;
+    await sql`DELETE FROM exams`;
+    await sql`DELETE FROM teachers`;
+
+    // 2. Process Roles (Insert or Ignore)
     for (const role of roles) {
       await sql`
         INSERT INTO teacher_roles (id, name)
@@ -18,7 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       `;
     }
 
-    // 2. Process Teachers
+    // 3. Process Teachers
     for (const t of teachers) {
       await sql`
         INSERT INTO teachers (id, name, subject_group, subject, role, email, available)
@@ -32,7 +44,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       `;
     }
 
-    // 3. Process Exams
+    // 4. Process Exams
     for (const e of exams) {
       await sql`
         INSERT INTO exams (id, name, subject, date, time)
@@ -50,7 +62,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       stats: {
         teachers: teachers.length,
         exams: exams.length,
-        roles: roles.length
+        roles: roles.length,
+        cleared: {
+          teachers: true,
+          exams: true,
+          allocations: true
+        }
       }
     });
   } catch (error: any) {

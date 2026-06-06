@@ -12,7 +12,6 @@ import {
   Calendar, 
   Sparkles, 
   AlertTriangle, 
-  RefreshCcw, 
   Trash2, 
   CheckCircle,
   Bell,
@@ -60,8 +59,19 @@ export default function AdminDashboard({
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const handleImportMapaGeral = async (e: React.ChangeEvent<HTMLInputElement>) => {
-     const file = e.target.files?.[0];
-     if (!file) return;
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const confirmed = window.confirm(
+        lang === 'pt'
+          ? 'Esta importacao vai apagar todos os professores e exames atuais, bem como as alocacoes associadas, antes de carregar o novo Mapa Geral. Pretende continuar?'
+          : 'This import will delete all current teachers and exams, as well as related allocations, before loading the new General Map. Do you want to continue?'
+      );
+
+      if (!confirmed) {
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
  
      setIsImporting(true);
      const reader = new FileReader();
@@ -185,7 +195,8 @@ export default function AdminDashboard({
         const result = await api.import.mapaGeral({
           teachers: importedTeachers,
           exams: importedExams,
-          roles: importedRoles
+          roles: importedRoles,
+          confirmReplace: true
         });
 
         if (result.error) {

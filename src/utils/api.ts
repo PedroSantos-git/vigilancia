@@ -74,7 +74,7 @@ export const api = {
     delete: (id: string) => fetch(`${API_BASE}/roles?id=${id}`, { method: 'DELETE' }).then(r => r.json()),
   },
   import: {
-    mapaGeral: (data: { teachers: any[], exams: any[], roles: any[] }) => fetch(`${API_BASE}/import-mapa`, {
+    mapaGeral: (data: { teachers: any[], exams: any[], roles: any[], confirmReplace: boolean }) => fetch(`${API_BASE}/import-mapa`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
