@@ -136,11 +136,35 @@ export default function ReportManager({
           <button
             onClick={() => {
               const doc = new jsPDF();
-              doc.text(lang === 'pt' ? 'Lista de Professores' : 'Teachers List', 10, 10);
-              const headers = [[lang === 'pt' ? 'Nome' : 'Name', lang === 'pt' ? 'Grupo' : 'Group', 'Email']];
-              const data = teachers.map(t => [t.name, t.subject_group, t.email || '-']);
-              autoTable(doc, { head: headers, body: data, startY: 20 });
-              doc.save(`professores_${new Date().toISOString().slice(0, 10)}.pdf`);
+              doc.setFontSize(16);
+              doc.text(lang === 'pt' ? 'Resumo de Atribuições por Professor' : 'Teacher Assignments Summary', 14, 15);
+              doc.setFontSize(10);
+              doc.text(`${new Date().toLocaleDateString()}`, 14, 22);
+
+              const headers = [[
+                lang === 'pt' ? 'Nome' : 'Name', 
+                lang === 'pt' ? 'Grupo' : 'Group', 
+                lang === 'pt' ? 'Total Vigilâncias/Suplências' : 'Total Invigilations/Standbys'
+              ]];
+              
+              const data = teachers.map(tchr => {
+                let count = 0;
+                allocations.forEach(alloc => {
+                  if (alloc.invigilator1Id === tchr.id) count++;
+                  if (alloc.invigilator2Id === tchr.id) count++;
+                  if (alloc.substituteId === tchr.id) count++;
+                });
+                return [tchr.name, tchr.subject_group, count.toString()];
+              }).sort((a, b) => a[0].localeCompare(b[0]));
+
+              autoTable(doc, { 
+                head: headers, 
+                body: data, 
+                startY: 30,
+                theme: 'grid',
+                headStyles: { fillColor: [15, 23, 42] }
+              });
+              doc.save(`resumo_atribuicoes_${new Date().toISOString().slice(0, 10)}.pdf`);
             }}
             className="flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2.5 rounded-lg text-xs font-semibold shadow-sm transition cursor-pointer"
           >

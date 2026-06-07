@@ -5,6 +5,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { Teacher, Language } from '../types';
 import { translations } from '../translations';
 import { api } from '../utils/api';
@@ -156,6 +158,47 @@ export default function TeacherManager({
     );
   });
 
+  const handleExportPDF = () => {
+    const doc = new jsPDF();
+    doc.setFontSize(16);
+    doc.text(lang === 'pt' ? 'Lista de Professores' : 'Teachers List', 14, 15);
+    doc.setFontSize(10);
+    doc.text(`${new Date().toLocaleDateString()}`, 14, 22);
+
+    // Group and sort
+    const sorted = [...teachers].sort((a, b) => {
+      // First by subject group
+      if (a.subject_group !== b.subject_group) return a.subject_group.localeCompare(b.subject_group);
+      // Then by name
+      return a.name.localeCompare(b.name);
+    });
+
+    const headers = [[
+      lang === 'pt' ? 'Grupo' : 'Group',
+      lang === 'pt' ? 'Nome' : 'Name',
+      lang === 'pt' ? 'Disciplina' : 'Subject',
+      lang === 'pt' ? 'Cargo' : 'Role'
+    ]];
+
+    const data = sorted.map(t => [
+      t.subject_group,
+      t.name,
+      t.subject,
+      availableRoles.find(r => r.id === t.role)?.name || t.role || '-'
+    ]);
+
+    autoTable(doc, {
+      head: headers,
+      body: data,
+      startY: 30,
+      theme: 'grid',
+      headStyles: { fillColor: [15, 23, 42] },
+      styles: { fontSize: 8 }
+    });
+
+    doc.save(`lista_professores_${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+
   return (
     <div id="teacher_manager" className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -164,6 +207,13 @@ export default function TeacherManager({
           <p className="text-slate-500 text-xs">{t.teacherSubtitle}</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <button
+            onClick={handleExportPDF}
+            className="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition shadow cursor-pointer"
+          >
+            <Download className="h-3.5 w-3.5" />
+            <span>{lang === 'pt' ? 'Exportar Lista (PDF)' : 'Export List (PDF)'}</span>
+          </button>
           <button
             onClick={handleOpenAdd}
             className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition shadow cursor-pointer"
