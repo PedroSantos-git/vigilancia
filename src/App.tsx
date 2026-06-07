@@ -236,12 +236,20 @@ export default function App() {
 
   // Manual update handlers
   const handleAddTeacher = async (teacher: Teacher) => {
-    await api.teachers.save(teacher);
-    setTeachers(prev => [...prev, teacher]);
+    try {
+      await api.teachers.save(teacher);
+      setTeachers(prev => [...prev, teacher]);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : (lang === 'pt' ? 'Erro ao guardar docente.' : 'Error saving teacher.'));
+    }
   };
   const handleUpdateTeacher = async (teacher: Teacher) => {
-    await api.teachers.save(teacher);
-    setTeachers(prev => prev.map(t => t.id === teacher.id ? teacher : t));
+    try {
+      await api.teachers.save(teacher);
+      setTeachers(prev => prev.map(t => t.id === teacher.id ? teacher : t));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : (lang === 'pt' ? 'Erro ao guardar docente.' : 'Error saving teacher.'));
+    }
   };
   const handleDeleteTeacher = async (id: string) => {
     await api.teachers.delete(id);

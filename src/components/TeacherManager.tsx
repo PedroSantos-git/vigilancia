@@ -95,9 +95,9 @@ export default function TeacherManager({
   const handleOpenEdit = (teacher: Teacher) => {
     setEditingTeacher(teacher);
     setName(teacher.name);
-    setSubjectGroup(teacher.subject_group);
-    setSubject(teacher.subject);
-    setRole(teacher.role || 'Professor');
+    setSubjectGroup(teacher.subject_group || '300');
+    setSubject(teacher.subject || '');
+    setRole(teacher.role || '');
     setEmail(teacher.email || '');
     setPhone('');
     setAvailable(teacher.available);
@@ -106,8 +106,10 @@ export default function TeacherManager({
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !subject) {
-      alert('Por favor, preencha todos os campos obrigatórios (Nome e Disciplina).');
+    if (!name.trim() || !subject.trim() || !subjectGroup.trim()) {
+      alert(lang === 'pt'
+        ? 'Por favor, preencha todos os campos obrigatórios (Nome, Grupo Disciplinar e Disciplina).'
+        : 'Please fill in all required fields (Name, Subject Group and Subject).');
       return;
     }
 
@@ -146,11 +148,13 @@ export default function TeacherManager({
   // Filter teachers list
   const filteredTeachers = teachers.filter(tchr => {
     const term = searchTerm.toLowerCase();
+    const roleName = availableRoles.find(r => r.id === tchr.role)?.name || tchr.role || '';
     return (
-      tchr.name.toLowerCase().includes(term) ||
-      tchr.subject.toLowerCase().includes(term) ||
-      tchr.subject_group.includes(term) ||
-      tchr.role.toLowerCase().includes(term)
+      (tchr.name || '').toLowerCase().includes(term) ||
+      (tchr.subject || '').toLowerCase().includes(term) ||
+      String(tchr.subject_group || '').toLowerCase().includes(term) ||
+      roleName.toLowerCase().includes(term) ||
+      (tchr.email || '').toLowerCase().includes(term)
     );
   });
 

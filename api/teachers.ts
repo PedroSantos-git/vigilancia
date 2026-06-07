@@ -13,18 +13,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         const mappedTeachers = teachers.map(t => ({
           ...t,
-          subjectGroup: t.subject_group,
-          unavailabilities: typeof t.unavailabilities === 'string' ? JSON.parse(t.unavailabilities) : t.unavailabilities
+          subject_group: t.subject_group ?? '',
+          subjectGroup: t.subject_group ?? '',
+          role: t.role ?? '',
+          email: t.email ?? '',
+          unavailabilities: typeof t.unavailabilities === 'string' ? JSON.parse(t.unavailabilities) : (t.unavailabilities ?? [])
         }));
         return res.status(200).json(mappedTeachers);
 
       case 'POST':
-        const { id, name, subjectGroup, subject, role, email, phone, available, unavailabilities } = req.body;
+        const {
+          id,
+          name,
+          subjectGroup: subjectGroupCamel,
+          subject_group: subjectGroupSnake,
+          subject,
+          role,
+          email,
+          phone,
+          available,
+          unavailabilities
+        } = req.body;
+
+        const subjectGroup = (subjectGroupCamel ?? subjectGroupSnake ?? '').toString().trim();
+
+        if (!name?.trim() || !subjectGroup || !subject?.trim()) {
+          return res.status(400).json({ error: 'Nome, grupo disciplinar e disciplina são obrigatórios.' });
+        }
+
+        const normalizedName = name.trim();
+        const normalizedSubject = subject.trim();
+        const normalizedRole = role?.trim() || null;
+        const normalizedEmail = email?.trim() || null;
+        const normalizedPhone = phone?.trim() || null;
         
         if (id) {
           await sql`
             INSERT INTO teachers (id, name, subject_group, subject, role, email, phone, available, unavailabilities)
-            VALUES (${id}, ${name}, ${subjectGroup}, ${subject}, ${role}, ${email}, ${phone}, ${available}, ${JSON.stringify(unavailabilities)})
+            VALUES (${id}, ${normalizedName}, ${subjectGroup}, ${normalizedSubject}, ${normalizedRole}, ${normalizedEmail}, ${normalizedPhone}, ${available ?? true}, ${JSON.stringify(unavailabilities ?? [])})
             ON CONFLICT (id) DO UPDATE SET
               name = EXCLUDED.name,
               subject_group = EXCLUDED.subject_group,
@@ -38,7 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         } else {
           await sql`
             INSERT INTO teachers (name, subject_group, subject, role, email, phone, available, unavailabilities)
-            VALUES (${name}, ${subjectGroup}, ${subject}, ${role}, ${email}, ${phone}, ${available}, ${JSON.stringify(unavailabilities)})
+            VALUES (${normalizedName}, ${subjectGroup}, ${normalizedSubject}, ${normalizedRole}, ${normalizedEmail}, ${normalizedPhone}, ${available ?? true}, ${JSON.stringify(unavailabilities ?? [])})
           `;
         }
         return res.status(201).json({ message: 'Teacher saved' });

@@ -9,7 +9,13 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(teacher)
-    }).then(r => r.json()),
+    }).then(async r => {
+      if (!r.ok) {
+        const err = await r.json();
+        throw new Error(err.error || 'Failed to save teacher');
+      }
+      return r.json();
+    }),
     delete: (id: string) => fetch(`${API_BASE}/teachers?id=${id}`, { method: 'DELETE' }).then(r => r.json()),
     deleteAll: () => fetch(`${API_BASE}/teachers?id=all`, { method: 'DELETE' }).then(r => r.json()),
   },

@@ -472,7 +472,7 @@ export default function AllocationManager({
               </div>
             </div>
             <div className="overflow-y-auto p-2 flex-1">
-              {teachers.filter(t => t.name.toLowerCase().includes(pickerSearch.toLowerCase()) || t.subject_group.includes(pickerSearch)).map(tchr => {
+              {teachers.filter(t => (t.name || '').toLowerCase().includes(pickerSearch.toLowerCase()) || String(t.subject_group || '').toLowerCase().includes(pickerSearch.toLowerCase())).map(tchr => {
                 const val = getTeacherValidationState(tchr.id, pickerSlot.allocation.id, pickerSlot.roleLabel);
                 return (
                   <button key={tchr.id} onClick={() => { handleSelectTeacher(pickerSlot.allocation, pickerSlot.roomId, pickerSlot.roleKey, tchr.id); setPickerSlot(null); setPickerSearch(''); }} className="w-full flex items-center justify-between p-3 hover:bg-slate-50 rounded-xl transition group text-left">
