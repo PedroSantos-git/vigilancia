@@ -105,6 +105,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           shift TEXT,
           modality TEXT,
           phase TEXT NOT NULL,
+          duration INTEGER NOT NULL DEFAULT 120,
+          tolerance INTEGER NOT NULL DEFAULT 30,
+          rooms_needed INTEGER NOT NULL DEFAULT 1,
           room_ids JSONB DEFAULT '[]'::jsonb
       );
     `;
@@ -209,9 +212,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ];
 
     for (const ex of initialExams) {
+      let duration = 120;
+      let tolerance = 30;
+      if (ex.year === '9') duration = 90;
+      if (ex.name.toLowerCase().includes('matemática')) duration = 150;
+
       await sql`
-        INSERT INTO exams (name, variant, subject_group, year, code, date, time, shift, modality, phase)
-        VALUES (${ex.name}, ${ex.variant}, ${ex.subject_group}, ${ex.year}, ${ex.code}, ${ex.date}, ${ex.time}, ${ex.shift}, ${ex.modality}, ${ex.phase})
+        INSERT INTO exams (name, variant, subject_group, year, code, date, time, shift, modality, phase, duration, tolerance, rooms_needed)
+        VALUES (${ex.name}, ${ex.variant}, ${ex.subject_group}, ${ex.year}, ${ex.code}, ${ex.date}, ${ex.time}, ${ex.shift}, ${ex.modality}, ${ex.phase}, ${duration}, ${tolerance}, 1)
       `;
     }
 

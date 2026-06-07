@@ -90,15 +90,16 @@ export default function RoomManager({
   };
 
   const moveRoom = (index: number, direction: 'up' | 'down') => {
-    const newRooms = [...rooms];
+    const sortedRooms = [...rooms].sort((a, b) => a.priority - b.priority);
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
     
-    if (targetIndex < 0 || targetIndex >= newRooms.length) return;
+    if (targetIndex < 0 || targetIndex >= sortedRooms.length) return;
     
-    // Swap rooms
+    // Swap rooms in the sorted array
+    const newRooms = [...sortedRooms];
     [newRooms[index], newRooms[targetIndex]] = [newRooms[targetIndex], newRooms[index]];
     
-    // Update priorities based on new order
+    // Re-assign priorities based on new order to ensure consistency
     const updatedRooms = newRooms.map((room, idx) => ({
       ...room,
       priority: idx + 1
@@ -106,6 +107,8 @@ export default function RoomManager({
     
     onUpdateAllRooms(updatedRooms);
   };
+
+  const sortedRoomsList = [...rooms].sort((a, b) => a.priority - b.priority);
 
   return (
     <div id="room_manager" className="space-y-6">
@@ -124,8 +127,8 @@ export default function RoomManager({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {rooms.length > 0 ? (
-          [...rooms].sort((a, b) => a.priority - b.priority).map((room, index) => (
+        {sortedRoomsList.length > 0 ? (
+          sortedRoomsList.map((room, index) => (
             <div 
               key={room.id} 
               className="bg-white border border-slate-200 shadow-sm hover:shadow transition rounded-xl p-5 relative overflow-hidden group"

@@ -158,6 +158,64 @@ export default function TeacherManager({
     );
   });
 
+  const handleExportXLSX = () => {
+    const dataToExport = teachers.map(t => ({
+      'Nome': t.name,
+      'Grupo Disciplinar': t.subject_group,
+      'Disciplina': t.subject,
+      'Cargo': availableRoles.find(r => r.id === t.role)?.name || t.role || '',
+      'Email': t.email || '',
+      'Disponível': t.available ? 'Sim' : 'Não'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Professores');
+    XLSX.writeFile(wb, `lista_professores_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  const handleImportXLSX = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws) as any[];
+
+        const newTeachers: Teacher[] = data.map(row => {
+          const roleName = row['Cargo'] || row['role'] || '';
+          const foundRole = availableRoles.find(r => r.name === roleName);
+          
+          return {
+            id: crypto.randomUUID(),
+            name: row['Nome'] || row['name'] || 'Sem Nome',
+            subject_group: String(row['Grupo Disciplinar'] || row['subject_group'] || '000'),
+            subject: row['Disciplina'] || row['subject'] || 'Sem Disciplina',
+            role: foundRole ? foundRole.id : (roleName || null),
+            email: row['Email'] || row['email'] || null,
+            available: row['Disponível'] === 'Sim' || row['available'] === true || row['available'] === 'true',
+            unavailabilities: []
+          };
+        });
+
+        for (const nt of newTeachers) {
+          onAddTeacher(nt);
+        }
+        alert(lang === 'pt' ? `${newTeachers.length} professores importados!` : `${newTeachers.length} teachers imported!`);
+      } catch (err) {
+        console.error('XLSX Import error:', err);
+        alert(t.csvError);
+      }
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = '';
+  };
+
   const handleExportPDF = () => {
     const doc = new jsPDF();
     doc.setFontSize(16);
@@ -207,12 +265,33 @@ export default function TeacherManager({
           <p className="text-slate-500 text-xs">{t.teacherSubtitle}</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleImportXLSX}
+            accept=".xlsx, .xls"
+            className="hidden"
+          />
           <button
-            onClick={handleExportPDF}
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center space-x-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition shadow cursor-pointer"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            <span>{lang === 'pt' ? 'Importar XLSX' : 'Import XLSX'}</span>
+          </button>
+          <button
+            onClick={handleExportXLSX}
             className="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition shadow cursor-pointer"
           >
             <Download className="h-3.5 w-3.5" />
-            <span>{lang === 'pt' ? 'Exportar Lista (PDF)' : 'Export List (PDF)'}</span>
+            <span>{lang === 'pt' ? 'Exportar XLSX' : 'Export XLSX'}</span>
+          </button>
+          <button
+            onClick={handleExportPDF}
+            className="flex items-center space-x-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition shadow cursor-pointer"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            <span>{lang === 'pt' ? 'Exportar PDF' : 'Export PDF'}</span>
           </button>
           <button
             onClick={handleOpenAdd}

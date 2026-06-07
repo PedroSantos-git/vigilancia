@@ -199,7 +199,7 @@ export default function AllocationManager({
             className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition cursor-pointer shadow-sm"
           >
             <Sparkles className="h-3.5 w-3.5" />
-            <span>{lang === 'pt' ? 'Distribuição Automática' : 'Auto-Allocate'}</span>
+            <span>{lang === 'pt' ? 'Atribuir vigilantes' : 'Assign invigilators'}</span>
           </button>
           <button
             onClick={() => onClearAllocationsForExam(currentExam.id)}
@@ -250,11 +250,13 @@ export default function AllocationManager({
                               {ex.name}
                             </span>
                             <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${
-                              examRooms.length > 0 
-                                ? 'bg-blue-100 text-blue-800' 
-                                : 'bg-slate-100 text-slate-500'
+                              examRooms.length === 0 
+                                ? 'bg-rose-100 text-rose-700' 
+                                : examRooms.length < (ex.roomsNeeded || 1)
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-emerald-100 text-emerald-800'
                             }`}>
-                              {examRooms.length}
+                              {examRooms.length} / {ex.roomsNeeded || 1}
                             </span>
                           </div>
                           <div className="text-[9px] text-slate-500 flex flex-wrap items-center gap-2">

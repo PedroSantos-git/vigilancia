@@ -31,6 +31,7 @@ interface AdminDashboardProps {
   exams: Exam[];
   allocations: Allocation[];
   onAutoTrigger: () => void;
+  onAutoTriggerRooms: () => void;
   onClearAllocations: () => void;
   onRefreshData: () => void;
 }
@@ -42,6 +43,7 @@ export default function AdminDashboard({
   exams,
   allocations,
   onAutoTrigger,
+  onAutoTriggerRooms,
   onClearAllocations,
   onRefreshData
 }: AdminDashboardProps) {
@@ -193,13 +195,20 @@ export default function AdminDashboard({
               : 'Consult schools exams coverage, scales and subject exceptions in real-time.'}
           </p>
         </div>
-        <div className="flex gap-2.5">
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={onAutoTriggerRooms}
+            className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition shadow shadow-blue-900/10 cursor-pointer"
+          >
+            <Home className="h-3.5 w-3.5" />
+            <span>{lang === 'pt' ? 'Atribuir salas' : 'Assign rooms'}</span>
+          </button>
           <button
             onClick={onAutoTrigger}
-            className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition shadow shadow-blue-700/10 cursor-pointer"
+            className="flex items-center space-x-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition shadow shadow-indigo-900/10 cursor-pointer"
           >
-            <Sparkles className="h-3.5 w-3.5" />
-            <span>{t.autoDistributeNow}</span>
+            <Users className="h-3.5 w-3.5" />
+            <span>{lang === 'pt' ? 'Atribuir vigilantes' : 'Assign invigilators'}</span>
           </button>
           <button
             onClick={() => {

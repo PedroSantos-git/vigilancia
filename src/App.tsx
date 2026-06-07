@@ -15,7 +15,7 @@ import {
   UserSession 
 } from './types';
 import { translations } from './translations';
-import { autoAllocate } from './utils/scheduler';
+import { autoAllocate, autoAllocateRooms } from './utils/scheduler';
 
 // Subcomponents
 import LoginScreen from './components/LoginScreen';
@@ -52,9 +52,10 @@ import { SchoolShipIcon } from './components/SchoolLogo';
 import { api } from './utils/api';
 
 const sortRooms = (list: Room[]): Room[] => {
-  return [...list].sort((a, b) => 
-    a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
-  );
+  return [...list].sort((a, b) => {
+    if (a.priority !== b.priority) return a.priority - b.priority;
+    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+  });
 };
 
 export default function App() {
@@ -300,6 +301,24 @@ export default function App() {
     } catch (err) {
       console.error('Error during auto trigger all:', err);
       alert('Erro durante a distribuição automática.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAutoTriggerRooms = async () => {
+    setIsLoading(true);
+    try {
+      const updatedExams = autoAllocateRooms(exams, rooms);
+      
+      // Save all updated exams
+      await Promise.all(updatedExams.map(ex => api.exams.save(ex)));
+      
+      setExams(updatedExams);
+      alert(lang === 'pt' ? 'Distribuição automática de salas concluída!' : 'Auto room allocation completed!');
+    } catch (err) {
+      console.error('Error during auto trigger rooms:', err);
+      alert('Erro ao distribuir salas automaticamente.');
     } finally {
       setIsLoading(false);
     }
@@ -562,6 +581,7 @@ export default function App() {
                   exams={exams} 
                   allocations={allocations} 
                   onAutoTrigger={handleAutoTriggerAll}
+                  onAutoTriggerRooms={handleAutoTriggerRooms}
                   onClearAllocations={handleClearAllocationsAll}
                   onRefreshData={handleRefreshData}
                 />

@@ -244,7 +244,22 @@ export default function ExamRoomManager({
                 <div className="space-y-2 pl-3 border-l-2 border-slate-100">
                   {group.exams.map(ex => {
                     const numRoomsAssoc = ex.roomIds?.length || 0;
+                    const roomsNeeded = ex.roomsNeeded || 1;
                     const isSelected = ex.id === selectedExamId;
+
+                    let statusColor = 'bg-slate-100 text-slate-500';
+                    let borderColor = 'border-slate-150';
+                    
+                    if (numRoomsAssoc === 0) {
+                      statusColor = 'bg-rose-100 text-rose-700';
+                      if (isSelected) borderColor = 'border-rose-500';
+                    } else if (numRoomsAssoc < roomsNeeded) {
+                      statusColor = 'bg-amber-100 text-amber-800';
+                      if (isSelected) borderColor = 'border-amber-500';
+                    } else {
+                      statusColor = 'bg-emerald-100 text-emerald-800';
+                      if (isSelected) borderColor = 'border-emerald-600';
+                    }
 
                     return (
                       <button
@@ -252,7 +267,7 @@ export default function ExamRoomManager({
                         onClick={() => setSelectedExamId(ex.id)}
                         className={`w-full text-left p-3 rounded-xl border transition flex flex-col gap-1 cursor-pointer ${
                           isSelected
-                            ? 'bg-blue-50/75 border-blue-600 shadow-sm'
+                            ? `${borderColor} bg-blue-50/75 shadow-sm`
                             : 'bg-white border-slate-150 hover:bg-slate-50'
                         }`}
                       >
@@ -262,12 +277,8 @@ export default function ExamRoomManager({
                           }`}>
                             {ex.name}
                           </span>
-                          <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${
-                            numRoomsAssoc > 0 
-                              ? 'bg-blue-100 text-blue-800' 
-                              : 'bg-slate-100 text-slate-500'
-                          }`}>
-                            {numRoomsAssoc}
+                          <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${statusColor}`}>
+                            {numRoomsAssoc} / {roomsNeeded}
                           </span>
                         </div>
 

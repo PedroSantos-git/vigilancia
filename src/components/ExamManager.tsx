@@ -6,7 +6,7 @@
 import React, { useState } from 'react';
 import { Exam, Language, Teacher } from '../types';
 import { translations } from '../translations';
-import { Plus, Calendar, Clock, Trash2, Edit2, X, FileDown, Layers, Tag, Hash, Bookmark } from 'lucide-react';
+import { Plus, Calendar, Clock, Trash2, Edit2, X, FileDown, Layers, Tag, Hash, Bookmark, Home } from 'lucide-react';
 import { getPeriodFromTime } from '../utils/scheduler';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -79,6 +79,7 @@ export default function ExamManager({
   const [phase, setPhase] = useState('1');
   const [duration, setDuration] = useState(120);
   const [tolerance, setTolerance] = useState(30);
+  const [roomsNeeded, setRoomsNeeded] = useState(1);
 
   const getDefaultTimes = (examYear: string, examName: string) => {
     if (examYear === '9') return { duration: 90, tolerance: 30 };
@@ -100,6 +101,7 @@ export default function ExamManager({
     setPhase('1');
     setDuration(120);
     setTolerance(30);
+    setRoomsNeeded(1);
     setIsModalOpen(true);
   };
 
@@ -117,6 +119,7 @@ export default function ExamManager({
     setPhase(ex.phase);
     setDuration(ex.duration || 120);
     setTolerance(ex.tolerance || 30);
+    setRoomsNeeded(ex.roomsNeeded || 1);
     setIsModalOpen(true);
   };
 
@@ -139,7 +142,8 @@ export default function ExamManager({
       modality,
       phase,
       duration,
-      tolerance
+      tolerance,
+      roomsNeeded
     };
 
     if (editingExam) {
@@ -188,8 +192,8 @@ export default function ExamManager({
     doc.text(timestamp, 15, 30);
 
     const headers = lang === 'pt'
-      ? [['Data', 'Hora', 'Fase', 'Exame', 'Ano', 'Código', 'Variante', 'Turno', 'Modalidade']]
-      : [['Date', 'Time', 'Phase', 'Exam', 'Year', 'Code', 'Variant', 'Shift', 'Modality']];
+      ? [['Data', 'Hora', 'Fase', 'Exame', 'Ano', 'Código', 'Variante', 'Turno', 'Modalidade', 'Salas']]
+      : [['Date', 'Time', 'Phase', 'Exam', 'Year', 'Code', 'Variant', 'Shift', 'Modality', 'Rooms']];
 
     const sortedExams = [...exams].sort((a, b) => {
       const dateCompare = a.date.localeCompare(b.date);
@@ -206,7 +210,8 @@ export default function ExamManager({
       ex.code || '-',
       ex.variant || '-',
       ex.shift || '-',
-      ex.modality || '-'
+      ex.modality || '-',
+      (ex.roomsNeeded || 1).toString()
     ]);
 
     autoTable(doc, {
@@ -365,6 +370,9 @@ export default function ExamManager({
                                 {ex.code && <span className="flex items-center gap-1"><Hash className="h-3 w-3" /> {ex.code}</span>}
                                 {ex.variant && <span className="flex items-center gap-1"><Tag className="h-3 w-3" /> {ex.variant}</span>}
                                 {ex.modality && <span className="flex items-center gap-1"><Bookmark className="h-3 w-3" /> {ex.modality}</span>}
+                                <span className="flex items-center gap-1 bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-bold">
+                                  <Home className="h-3 w-3" /> {ex.roomsNeeded || 1} {lang === 'pt' ? 'Salas' : 'Rooms'}
+                                </span>
                               </div>
                             </div>
                             <div className="flex space-x-1">
@@ -473,6 +481,10 @@ export default function ExamManager({
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Tolerância (min) *</label>
                   <input type="number" required value={tolerance} onChange={(e) => setTolerance(Number(e.target.value))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Salas Necessárias *</label>
+                  <input type="number" required min="1" value={roomsNeeded} onChange={(e) => setRoomsNeeded(Number(e.target.value))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-blue-500" />
                 </div>
               </div>
 

@@ -42,6 +42,87 @@ export function hasSubjectConflict(teacher: Teacher, exam: Exam): boolean {
 }
 
 /**
+ * Helper to add minutes to a time string "HH:mm".
+ */
+export function addMinutes(timeStr: string, minutes: number): string {
+  const [hours, mins] = timeStr.split(':').map(Number);
+  const date = new Date();
+  date.setHours(hours, mins + minutes, 0, 0);
+  return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+}
+
+/**
+ * Checks if two time ranges overlap.
+ */
+export function isTimeOverlap(start1: string, end1: string, start2: string, end2: string): boolean {
+  return start1.localeCompare(end1) < 0 && start2.localeCompare(end2) < 0 && 
+         start1.localeCompare(end2) < 0 && start2.localeCompare(end1) < 0;
+}
+
+/**
+ * Runs the auto-distribution of rooms for all exams.
+ */
+export function autoAllocateRooms(
+  exams: Exam[],
+  rooms: Room[]
+): Exam[] {
+  const sortedRooms = [...rooms].sort((a, b) => a.priority - b.priority);
+  
+  // Sort exams by priority: Regular first, then by date/time
+  const sortedExams = [...exams].sort((a, b) => {
+    const isSpecialA = (a.variant || "").includes("LNM") || (a.modality && a.modality !== "");
+    const isSpecialB = (b.variant || "").includes("LNM") || (b.modality && b.modality !== "");
+    
+    if (isSpecialA !== isSpecialB) return isSpecialA ? 1 : -1;
+    
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    return a.time.localeCompare(b.time);
+  });
+
+  const updatedExams = [...exams];
+
+  sortedExams.forEach(exam => {
+    const roomsNeeded = exam.roomsNeeded || 1;
+    const currentRooms = exam.roomIds || [];
+    
+    if (currentRooms.length >= roomsNeeded) return;
+
+    const roomsToAssign: string[] = [...currentRooms];
+
+    for (const room of sortedRooms) {
+      if (roomsToAssign.length >= roomsNeeded) break;
+      if (roomsToAssign.includes(room.id)) continue;
+
+      // Check if room is available
+      const isAvailable = updatedExams.every(otherEx => {
+        if (!otherEx.roomIds?.includes(room.id) || otherEx.date !== exam.date || otherEx.id === exam.id) return true;
+
+        const otherStart = otherEx.time;
+        const otherEndWithBuffer = addMinutes(otherStart, (otherEx.duration || 120) + (otherEx.tolerance || 30) + 45);
+        
+        const currentStart = exam.time;
+        const currentEndWithBuffer = addMinutes(currentStart, (exam.duration || 120) + (exam.tolerance || 30) + 45);
+
+        // Standard overlap check with buffer
+        return !isTimeOverlap(currentStart, currentEndWithBuffer, otherStart, otherEndWithBuffer);
+      });
+
+      if (isAvailable) {
+        roomsToAssign.push(room.id);
+      }
+    }
+
+    // Update the exam in the result array
+    const idx = updatedExams.findIndex(e => e.id === exam.id);
+    if (idx !== -1) {
+      updatedExams[idx] = { ...updatedExams[idx], roomIds: roomsToAssign };
+    }
+  });
+
+  return updatedExams;
+}
+
+/**
  * Resolves a period ("09:00" or "14:00") from any custom hour string (e.g., "09:30" => "09:00").
  */
 export function getPeriodFromTime(time: string): "09:00" | "14:00" {

@@ -43,6 +43,7 @@ export interface Exam {
   phase: string;        // "1", "2"
   duration: number;     // In minutes
   tolerance: number;    // In minutes
+  roomsNeeded: number;  // Number of rooms required for this exam
   roomIds?: string[];   // Associated room IDs for this exam
 }
 

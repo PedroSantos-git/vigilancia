@@ -7,7 +7,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     switch (method) {
       case 'GET':
-        const { rows: rooms } = await sql`SELECT * FROM rooms ORDER BY name ASC`;
+        const { rows: rooms } = await sql`SELECT * FROM rooms ORDER BY priority ASC, name ASC`;
         return res.status(200).json(rooms);
 
       case 'POST':
