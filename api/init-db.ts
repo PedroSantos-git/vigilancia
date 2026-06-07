@@ -23,6 +23,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await sql`ALTER TABLE exams ADD COLUMN IF NOT EXISTS room_ids JSONB DEFAULT '[]'::jsonb`;
     await sql`ALTER TABLE rooms ADD COLUMN IF NOT EXISTS priority INTEGER DEFAULT 0`;
 
+    if (mode === 'repair') {
+      return res.status(200).json({ message: 'Database schema repaired successfully' });
+    }
+
     // 2. Create teacher_roles FIRST (no dependencies)
     await sql`
       CREATE TABLE IF NOT EXISTS teacher_roles (

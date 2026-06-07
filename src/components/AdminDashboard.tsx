@@ -66,7 +66,7 @@ export default function AdminDashboard({
     
     setIsRepairing(true);
     try {
-      const res = await fetch('/api/migrate');
+      const res = await fetch('/api/init-db?mode=repair');
       const data = await res.json();
       if (res.ok) {
         alert(lang === 'pt' ? 'Base de dados reparada com sucesso!' : 'Database repaired successfully!');
