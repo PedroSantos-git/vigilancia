@@ -233,9 +233,19 @@ export default function ExamRoomManager({
                             <Clock className="h-2.5 w-2.5 text-slate-400" />
                             {ex.time}
                           </span>
+                          {ex.code && (
+                            <span className="bg-slate-100 text-slate-600 px-1 rounded font-mono">
+                              {ex.code}
+                            </span>
+                          )}
                           {ex.variant && (
                             <span className="flex items-center gap-1 bg-amber-50 text-amber-700 px-1 rounded">
                               {ex.variant}
+                            </span>
+                          )}
+                          {ex.modality && (
+                            <span className="bg-blue-50 text-blue-700 px-1 rounded">
+                              {ex.modality}
                             </span>
                           )}
                           <span className="bg-slate-100 px-1 rounded">{ex.year}º Ano</span>

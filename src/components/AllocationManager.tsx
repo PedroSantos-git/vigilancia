@@ -257,10 +257,12 @@ export default function AllocationManager({
                               {examRooms.length}
                             </span>
                           </div>
-                          <div className="text-[9px] text-slate-500 flex items-center gap-2">
+                          <div className="text-[9px] text-slate-500 flex flex-wrap items-center gap-2">
                             <Clock className="h-2.5 w-2.5" />
                             {ex.time}
+                            {ex.code && <span className="bg-slate-100 text-slate-600 px-1 rounded font-mono">{ex.code}</span>}
                             {ex.variant && <span className="bg-amber-50 text-amber-700 px-1 rounded">{ex.variant}</span>}
+                            {ex.modality && <span className="bg-blue-50 text-blue-700 px-1 rounded">{ex.modality}</span>}
                           </div>
                         </button>
 
