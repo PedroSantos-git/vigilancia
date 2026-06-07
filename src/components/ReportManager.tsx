@@ -147,15 +147,23 @@ export default function ReportManager({
                 lang === 'pt' ? 'Total Vigilâncias/Suplências' : 'Total Invigilations/Standbys'
               ]];
               
-              const data = teachers.map(tchr => {
-                let count = 0;
-                allocations.forEach(alloc => {
-                  if (alloc.invigilator1Id === tchr.id) count++;
-                  if (alloc.invigilator2Id === tchr.id) count++;
-                  if (alloc.substituteId === tchr.id) count++;
-                });
-                return [tchr.name, tchr.subject_group, count.toString()];
-              }).sort((a, b) => a[0].localeCompare(b[0]));
+              const data = teachers
+                .filter(tchr => {
+                  // Rule: Only include available teachers with no special role (or role "professor")
+                  const tRole = (tchr.role || "").toLowerCase();
+                  const isProfessor = tRole === "" || tRole === "professor";
+                  return tchr.available && isProfessor;
+                })
+                .map(tchr => {
+                  let count = 0;
+                  allocations.forEach(alloc => {
+                    if (alloc.invigilator1Id === tchr.id) count++;
+                    if (alloc.invigilator2Id === tchr.id) count++;
+                    if (alloc.substituteId === tchr.id) count++;
+                  });
+                  return [tchr.name, tchr.subject_group, count.toString()];
+                })
+                .sort((a, b) => a[0].localeCompare(b[0]));
 
               autoTable(doc, { 
                 head: headers, 

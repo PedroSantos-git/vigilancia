@@ -225,7 +225,9 @@ export function autoAllocate(
     const fatigueA = fatigueMap.get(a.id) || 0;
     const fatigueB = fatigueMap.get(b.id) || 0;
     if (fatigueA !== fatigueB) return fatigueA - fatigueB;
-    return Math.random() - 0.5;
+    // For equal fatigue, use a stable secondary sort (id) or a controlled shuffle
+    // Using name/id ensures we don't get wild random swings in a single batch
+    return a.id.localeCompare(b.id);
   });
 
   // 4. Room Priority Assignment (Rule: assign rooms by priority)
@@ -253,19 +255,34 @@ export function autoAllocate(
     const positions: Array<'invigilator1Id' | 'invigilator2Id'> = ['invigilator1Id', 'invigilator2Id'];
     positions.forEach(pos => {
       if (alloc && !alloc[pos]) {
-        let candidate = sortedPool.find(t => !assignedInThisBatch.has(t.id) && !hasSubjectConflict(t, exam));
+        // Find candidate and UPDATE fatigueMap immediately within the loop to keep balance
+        let candidateIdx = sortedPool.findIndex(t => !assignedInThisBatch.has(t.id) && !hasSubjectConflict(t, exam));
         
         // Fallback: use anyone from pool if conflict is unavoidable
-        if (!candidate) {
-          candidate = sortedPool.find(t => !assignedInThisBatch.has(t.id));
-          if (candidate) {
-            warnings.push(`Conflito disciplinar inevitável: ${candidate.name} alocado em ${room.name}.`);
+        if (candidateIdx === -1) {
+          candidateIdx = sortedPool.findIndex(t => !assignedInThisBatch.has(t.id));
+          if (candidateIdx !== -1) {
+            warnings.push(`Conflito disciplinar inevitável: ${sortedPool[candidateIdx].name} alocado em ${room.name}.`);
           }
         }
 
-        if (candidate) {
+        if (candidateIdx !== -1) {
+          const candidate = sortedPool[candidateIdx];
           alloc[pos] = candidate.id;
           assignedInThisBatch.add(candidate.id);
+          
+          // Update fatigue immediately for the next position in this SAME exam
+          const newFatigue = (fatigueMap.get(candidate.id) || 0) + 1;
+          fatigueMap.set(candidate.id, newFatigue);
+          
+          // Re-sort the pool based on updated fatigue to keep balance perfect
+          sortedPool.sort((a, b) => {
+            const fA = fatigueMap.get(a.id) || 0;
+            const fB = fatigueMap.get(b.id) || 0;
+            if (fA !== fB) return fA - fB;
+            return a.id.localeCompare(b.id);
+          });
+
           logsArr.push({
             teacherId: candidate.id,
             message: `Vigilante ${pos === 'invigilator1Id' ? '1' : '2'} em ${room.name} (${exam.name}).`
@@ -279,27 +296,44 @@ export function autoAllocate(
   sortedRooms.forEach(room => {
     const alloc = resultAllocations.find(a => a.roomId === room.id && a.examId === exam.id);
     if (alloc && !alloc.substituteId) {
-      let candidate = sortedPool.find(t => !assignedInThisBatch.has(t.id) && !hasSubjectConflict(t, exam));
+      let candidateIdx = sortedPool.findIndex(t => !assignedInThisBatch.has(t.id) && !hasSubjectConflict(t, exam));
       
-      if (!candidate) {
-        candidate = sortedPool.find(t => !assignedInThisBatch.has(t.id));
+      if (candidateIdx === -1) {
+        candidateIdx = sortedPool.findIndex(t => !assignedInThisBatch.has(t.id));
       }
 
-      // Rule: Pedro Stealth Rule (part 2: last resort for substitute)
-      if (!candidate) {
-        const pedro = teachers.find(t => t.name === STEALTH_NAME);
-        if (pedro && !assignedInThisBatch.has(pedro.id) && !busyOnSameDay.has(pedro.id) && !isTeacherUnavailableAt(pedro, exam.date, exam.time)) {
-          candidate = pedro;
-        }
-      }
-
-      if (candidate) {
+      if (candidateIdx !== -1) {
+        const candidate = sortedPool[candidateIdx];
         alloc.substituteId = candidate.id;
         assignedInThisBatch.add(candidate.id);
+        
+        // Update fatigue
+        const newFatigue = (fatigueMap.get(candidate.id) || 0) + 1;
+        fatigueMap.set(candidate.id, newFatigue);
+        
+        // Re-sort
+        sortedPool.sort((a, b) => {
+          const fA = fatigueMap.get(a.id) || 0;
+          const fB = fatigueMap.get(b.id) || 0;
+          if (fA !== fB) return fA - fB;
+          return a.id.localeCompare(b.id);
+        });
+
         logsArr.push({
           teacherId: candidate.id,
           message: `Suplente em ${room.name} (${exam.name}).`
         });
+      } else {
+        // Rule: Pedro Stealth Rule (part 2: last resort for substitute)
+        const pedro = teachers.find(t => t.name === STEALTH_NAME);
+        if (pedro && !assignedInThisBatch.has(pedro.id) && !busyOnSameDay.has(pedro.id) && !isTeacherUnavailableAt(pedro, exam.date, exam.time)) {
+          alloc.substituteId = pedro.id;
+          assignedInThisBatch.add(pedro.id);
+          logsArr.push({
+            teacherId: pedro.id,
+            message: `Suplente em ${room.name} (${exam.name}).`
+          });
+        }
       }
     }
   });
