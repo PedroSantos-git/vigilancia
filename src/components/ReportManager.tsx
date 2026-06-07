@@ -82,7 +82,6 @@ export default function ReportManager({
 
   const handleExportTeachersPDF = () => {
     const records = getValidAllocationRecords();
-    const teacherById = new Map((Array.isArray(teachers) ? teachers : []).map(teacher => [teacher.id, teacher]));
 
     type TeacherAssignment = {
       teacherId: string;
@@ -118,7 +117,19 @@ export default function ReportManager({
     ]];
 
     const data: string[][] = [];
-    const sortedTeachers = [...(Array.isArray(teachers) ? teachers : [])].sort((a, b) => a.name.localeCompare(b.name));
+    const sortedTeachers = [...(Array.isArray(teachers) ? teachers : [])]
+      .filter(teacher => {
+        const teacherAssignments = assignmentsByTeacher.get(teacher.id) || [];
+        const hasAssignments = teacherAssignments.length > 0;
+        const roleNorm = String(teacher.role || '').toLowerCase().trim();
+        const hasNoSpecialRole = roleNorm === '' || roleNorm === 'professor' || roleNorm === 'teacher';
+        const isEligibleByProfile = teacher.available && hasNoSpecialRole;
+
+        // Default listing: only available teachers with no special role.
+        // Exception: if teacher already has assignments, always include.
+        return isEligibleByProfile || hasAssignments;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
 
     sortedTeachers.forEach(teacher => {
       const teacherAssignments = [...(assignmentsByTeacher.get(teacher.id) || [])].sort((a, b) => {

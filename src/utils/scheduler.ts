@@ -94,14 +94,12 @@ function buildDayBusySet(allocations: Allocation[], examById: Map<string, Exam>)
 function markAllocationBusy(
   allocation: Allocation,
   exam: Exam,
-  dayBusy: Set<string>,
-  roundAssigned: Set<string>
+  dayBusy: Set<string>
 ): void {
   const assigned = [allocation.invigilator1Id, allocation.invigilator2Id, allocation.substituteId];
   for (const teacherId of assigned) {
     if (!teacherId) continue;
     dayBusy.add(`${teacherId}@@${exam.date}`);
-    roundAssigned.add(teacherId);
   }
 }
 
@@ -110,19 +108,50 @@ function randomPick<T>(list: T[]): T {
   return list[idx];
 }
 
+function getAssignmentCount(assignmentCounts: Map<string, number>, teacherId: string): number {
+  return assignmentCounts.get(teacherId) || 0;
+}
+
+function incrementAssignmentCount(assignmentCounts: Map<string, number>, teacherId: string | null): void {
+  if (!teacherId) return;
+  if (!assignmentCounts.has(teacherId)) return;
+  assignmentCounts.set(teacherId, getAssignmentCount(assignmentCounts, teacherId) + 1);
+}
+
+function canAssignPedroByRound(basePool: Teacher[], assignmentCounts: Map<string, number>, pedro: Teacher): boolean {
+  const nonPedroPool = basePool.filter(teacher => !isPedroTeacher(teacher));
+  if (nonPedroPool.length === 0) return true;
+
+  const pedroCount = getAssignmentCount(assignmentCounts, pedro.id);
+  const minNonPedroCount = Math.min(...nonPedroPool.map(teacher => getAssignmentCount(assignmentCounts, teacher.id)));
+
+  // Pedro only receives the next assignment after all other eligible teachers reached that round.
+  return pedroCount < minNonPedroCount;
+}
+
 function pickCandidateForPhase(
-  _phase: AllocationRoleKey,
   candidates: Teacher[],
-  roundAssigned: Set<string>
+  basePool: Teacher[],
+  assignmentCounts: Map<string, number>
 ): Teacher | null {
   if (candidates.length === 0) return null;
 
-  const freshCandidates = candidates.filter(t => !roundAssigned.has(t.id));
-  if (freshCandidates.length > 0) return randomPick(freshCandidates);
+  const nonPedroCandidates = candidates.filter(teacher => !isPedroTeacher(teacher));
+  let pool = nonPedroCandidates;
 
-  // Start a new fairness round when all current candidates were already used.
-  roundAssigned.clear();
-  return randomPick(candidates);
+  // Pedro is only considered when there are no other candidates for the slot.
+  if (pool.length === 0) {
+    pool = candidates.filter(teacher => {
+      if (!isPedroTeacher(teacher)) return true;
+      return canAssignPedroByRound(basePool, assignmentCounts, teacher);
+    });
+  }
+
+  if (pool.length === 0) return null;
+
+  const minAssignedCount = Math.min(...pool.map(teacher => getAssignmentCount(assignmentCounts, teacher.id)));
+  const leastUsedPool = pool.filter(teacher => getAssignmentCount(assignmentCounts, teacher.id) === minAssignedCount);
+  return randomPick(leastUsedPool);
 }
 
 function runAutoAllocationForPairs(
@@ -137,11 +166,21 @@ function runAutoAllocationForPairs(
   const targetAllocationByKey = new Map<string, Allocation>();
   const warnings: string[] = [];
   const notifications: Array<{ teacherId: string; message: string }> = [];
-  const roundAssigned = new Set<string>();
   const dayBusy = buildDayBusySet(baselineAllocations, examById);
+  const assignmentCounts = new Map<string, number>();
+  basePool.forEach(teacher => assignmentCounts.set(teacher.id, 0));
+
+  baselineAllocations.forEach(allocation => {
+    incrementAssignmentCount(assignmentCounts, allocation.invigilator1Id);
+    incrementAssignmentCount(assignmentCounts, allocation.invigilator2Id);
+    incrementAssignmentCount(assignmentCounts, allocation.substituteId);
+  });
 
   for (const alloc of existingTargetAllocations) {
     targetAllocationByKey.set(allocationKey(alloc.examId, alloc.roomId), { ...alloc });
+    incrementAssignmentCount(assignmentCounts, alloc.invigilator1Id);
+    incrementAssignmentCount(assignmentCounts, alloc.invigilator2Id);
+    incrementAssignmentCount(assignmentCounts, alloc.substituteId);
   }
 
   for (const pair of pairs) {
@@ -162,7 +201,7 @@ function runAutoAllocationForPairs(
     const key = allocationKey(pair.exam.id, pair.room.id);
     const alloc = targetAllocationByKey.get(key);
     if (!alloc) continue;
-    markAllocationBusy(alloc, pair.exam, dayBusy, roundAssigned);
+    markAllocationBusy(alloc, pair.exam, dayBusy);
   }
 
   const phases: AllocationRoleKey[] = ["invigilator1Id", "invigilator2Id", "substituteId"];
@@ -187,10 +226,7 @@ function runAutoAllocationForPairs(
         return true;
       });
 
-      // Policy: Pedro is always kept as the last option.
-      const nonPedroCandidates = allowedByRules.filter(teacher => !isPedroTeacher(teacher));
-      const preferredPool = nonPedroCandidates.length > 0 ? nonPedroCandidates : allowedByRules;
-      const selected = pickCandidateForPhase(phase, preferredPool, roundAssigned);
+      const selected = pickCandidateForPhase(allowedByRules, basePool, assignmentCounts);
 
       if (!selected) {
         warnings.push(
@@ -201,7 +237,7 @@ function runAutoAllocationForPairs(
 
       alloc[phase] = selected.id;
       dayBusy.add(`${selected.id}${dayKeySuffix}`);
-      roundAssigned.add(selected.id);
+      incrementAssignmentCount(assignmentCounts, selected.id);
       notifications.push({
         teacherId: selected.id,
         message: `${ROLE_LABEL_PT[phase]} em ${pair.room.name} - ${pair.exam.name} (${pair.exam.date}).`
