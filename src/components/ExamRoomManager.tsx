@@ -74,6 +74,36 @@ export default function ExamRoomManager({
   // Active Exam
   const currentExam = exams.find(e => e.id === selectedExamId) || exams[0];
 
+  // Group exams by date and sort
+  const groupExamsByDate = () => {
+    const groups: { [date: string]: Exam[] } = {};
+    
+    // Sort all exams first: time -> name -> modality
+    const sortedExams = [...exams].sort((a, b) => {
+      // 1. Time
+      if (a.time !== b.time) return a.time.localeCompare(b.time);
+      // 2. Name
+      if (a.name !== b.name) return a.name.localeCompare(b.name);
+      // 3. Modality (variant)
+      const modA = a.variant || '';
+      const modB = b.variant || '';
+      return modA.localeCompare(modB);
+    });
+
+    sortedExams.forEach(ex => {
+      if (!groups[ex.date]) groups[ex.date] = [];
+      groups[ex.date].push(ex);
+    });
+
+    // Return sorted dates
+    return Object.keys(groups).sort().map(date => ({
+      date,
+      exams: groups[date]
+    }));
+  };
+
+  const groupedExams = groupExamsByDate();
+
   // Room Association Status Helper
   // Returns conflicting exam if there is an overlapping reservation
   const getRoomConflict = (room: Room, examToCheck: Exam): Exam | null => {
@@ -152,95 +182,137 @@ export default function ExamRoomManager({
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
-        {/* Left Column: Interactive Exam Selector */}
+        {/* Left Column: Interactive Exam Selector (Tree Structure) */}
         <div className="lg:col-span-4 bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
           <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
             {t.selectExamToAssociate}
           </label>
           
-          <div className="space-y-2.5 max-h-[400px] overflow-y-auto pr-1">
-            {exams.map(ex => {
-              const numRoomsAssoc = ex.roomIds?.length || 0;
-              const isSelected = ex.id === currentExam.id;
+          <div className="space-y-4 max-h-[600px] overflow-y-auto pr-1">
+            {groupedExams.map(group => (
+              <div key={group.date} className="space-y-2">
+                <div className="flex items-center gap-2 px-1">
+                  <Calendar className="h-3.5 w-3.5 text-blue-600" />
+                  <span className="text-[11px] font-bold text-slate-900 uppercase tracking-wider">
+                    {group.date}
+                  </span>
+                </div>
+                
+                <div className="space-y-2 pl-3 border-l-2 border-slate-100">
+                  {group.exams.map(ex => {
+                    const numRoomsAssoc = ex.roomIds?.length || 0;
+                    const isSelected = ex.id === selectedExamId;
 
-              return (
-                <button
-                  key={ex.id}
-                  onClick={() => setSelectedExamId(ex.id)}
-                  className={`w-full text-left p-3.5 rounded-xl border transition flex flex-col gap-2 cursor-pointer ${
-                    isSelected
-                      ? 'bg-blue-50/75 border-blue-600 shadow-sm'
-                      : 'bg-white border-slate-150 hover:bg-slate-50'
-                  }`}
-                >
-                  <div className="flex justify-between items-start gap-2">
-                    <span className={`text-xs font-bold ${
-                      isSelected ? 'text-blue-900' : 'text-slate-800'
-                    }`}>
-                      {ex.name}
-                    </span>
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                      numRoomsAssoc > 0 
-                        ? 'bg-blue-100 text-blue-800' 
-                        : 'bg-slate-100 text-slate-500'
-                    }`}>
-                      {numRoomsAssoc} {numRoomsAssoc === 1 ? (lang === 'pt' ? 'sala' : 'room') : (lang === 'pt' ? 'salas' : 'rooms')}
-                    </span>
-                  </div>
+                    return (
+                      <button
+                        key={ex.id}
+                        onClick={() => setSelectedExamId(ex.id)}
+                        className={`w-full text-left p-3 rounded-xl border transition flex flex-col gap-1 cursor-pointer ${
+                          isSelected
+                            ? 'bg-blue-50/75 border-blue-600 shadow-sm'
+                            : 'bg-white border-slate-150 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start gap-2">
+                          <span className={`text-[11px] font-bold leading-tight ${
+                            isSelected ? 'text-blue-900' : 'text-slate-800'
+                          }`}>
+                            {ex.name}
+                          </span>
+                          <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${
+                            numRoomsAssoc > 0 
+                              ? 'bg-blue-100 text-blue-800' 
+                              : 'bg-slate-100 text-slate-500'
+                          }`}>
+                            {numRoomsAssoc}
+                          </span>
+                        </div>
 
-                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500">
-                    <span className="flex items-center gap-1">
-                      <Calendar className="h-3 w-3 text-slate-400" />
-                      {ex.date}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Clock className="h-3 w-3 text-slate-400" />
-                      {getPeriodFromTime(ex.time) === '09:00' ? (lang === 'pt' ? `Manhã (${ex.time})` : `Morning (${ex.time})`) : (lang === 'pt' ? `Tarde (${ex.time})` : `Afternoon (${ex.time})`)}
-                    </span>
-                  </div>
-
-                  <div className="text-[10px] text-slate-400 border-t border-slate-100 pt-1.5 mt-0.5">
-                    {lang === 'pt' ? 'Grupo Disciplinar' : 'Subject Group'}: <span className="font-semibold text-slate-600">{ex.subject_group}</span>
-                  </div>
-                </button>
-              );
-            })}
+                        <div className="flex flex-wrap gap-x-2 gap-y-1 text-[9px] text-slate-500">
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-2.5 w-2.5 text-slate-400" />
+                            {ex.time}
+                          </span>
+                          {ex.variant && (
+                            <span className="flex items-center gap-1 bg-amber-50 text-amber-700 px-1 rounded">
+                              {ex.variant}
+                            </span>
+                          )}
+                          <span className="bg-slate-100 px-1 rounded">{ex.year}º Ano</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
         {/* Right Column: Physical Rooms Check-list and Overlap Safeguards */}
         <div className="lg:col-span-8 space-y-4">
           
-          {/* Detail card of selected Exam */}
-          <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-sm border border-slate-850 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-[9px] font-bold uppercase tracking-widest bg-blue-600/35 border border-blue-500/25 text-blue-300 px-2 py-0.5 rounded">
-                  {lang === 'pt' ? 'Exame Ativo' : 'Selected Exam'}
+          {/* Detail card of selected Exam - COMPREHENSIVE VIEW */}
+          <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-sm border border-slate-850">
+            <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
+              <div className="space-y-3 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] font-bold uppercase tracking-widest bg-blue-600/35 border border-blue-500/25 text-blue-300 px-2 py-0.5 rounded">
+                    {lang === 'pt' ? 'Exame Ativo' : 'Selected Exam'}
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    {currentExam.id}
+                  </span>
+                </div>
+                
+                <div>
+                  <h3 className="text-xl font-black tracking-tight text-white">
+                    {currentExam.name}
+                  </h3>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2">
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                      <Calendar className="h-3.5 w-3.5 text-blue-500" />
+                      <span className="font-bold text-slate-200">{currentExam.date}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                      <Clock className="h-3.5 w-3.5 text-blue-500" />
+                      <span className="font-bold text-slate-200">{currentExam.time}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                      <Layers className="h-3.5 w-3.5 text-blue-500" />
+                      <span className="font-bold text-slate-200">Fase {currentExam.phase}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                  <div className="bg-slate-800/50 p-2 rounded-lg border border-slate-700/30">
+                    <span className="block text-[9px] text-slate-500 uppercase font-bold tracking-wider mb-0.5">Ano</span>
+                    <span className="text-xs font-bold text-slate-200">{currentExam.year}º Ano</span>
+                  </div>
+                  <div className="bg-slate-800/50 p-2 rounded-lg border border-slate-700/30">
+                    <span className="block text-[9px] text-slate-500 uppercase font-bold tracking-wider mb-0.5">Código</span>
+                    <span className="text-xs font-bold text-slate-200">{currentExam.code || '---'}</span>
+                  </div>
+                  <div className="bg-slate-800/50 p-2 rounded-lg border border-slate-700/30">
+                    <span className="block text-[9px] text-slate-500 uppercase font-bold tracking-wider mb-0.5">Variante</span>
+                    <span className="text-xs font-bold text-slate-200">{currentExam.variant || 'Standard'}</span>
+                  </div>
+                  <div className="bg-slate-800/50 p-2 rounded-lg border border-slate-700/30">
+                    <span className="block text-[9px] text-slate-500 uppercase font-bold tracking-wider mb-0.5">Modalidade</span>
+                    <span className="text-xs font-bold text-slate-200">{currentExam.modality || 'Regular'}</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-blue-600 rounded-2xl p-5 text-center flex flex-col justify-center shadow-lg shadow-blue-600/20 border border-blue-500/50 min-w-[120px]">
+                <span className="text-[10px] text-blue-100 uppercase tracking-widest font-bold">
+                  {lang === 'pt' ? 'Salas' : 'Rooms'}
                 </span>
-                <span className="text-[10px] text-slate-400 font-medium">
-                  ID: {currentExam.id}
+                <span className="text-3xl font-black text-white mt-1">
+                  {currentExam.roomIds?.length || 0}
                 </span>
               </div>
-              <h3 className="text-sm font-extrabold tracking-wide">
-                {currentExam.name}
-              </h3>
-              <p className="text-[11px] text-slate-400 mt-1 flex flex-wrap items-center gap-3">
-                <span>{lang === 'pt' ? 'Grupo Disciplinar' : 'Subject Group'}: <strong className="text-white">{currentExam.subject_group}</strong></span>
-                <span>•</span>
-                <span>{lang === 'pt' ? 'Data' : 'Date'}: <strong className="text-white">{currentExam.date}</strong></span>
-                <span>•</span>
-                <span>{lang === 'pt' ? 'Hora' : 'Time'}: <strong className="text-white">{currentExam.time}</strong></span>
-              </p>
-            </div>
-            
-            <div className="bg-slate-800/80 rounded-xl px-4 py-2 border border-slate-700/40 text-center self-stretch sm:self-auto flex flex-col justify-center">
-              <span className="text-[9px] text-slate-400 uppercase tracking-widest font-bold">
-                {lang === 'pt' ? 'Salas Definidas' : 'Allocated Rooms'}
-              </span>
-              <span className="text-lg font-black text-blue-400 mt-0.5">
-                {currentExam.roomIds?.length || 0}
-              </span>
             </div>
           </div>
 
