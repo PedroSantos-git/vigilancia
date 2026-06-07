@@ -61,6 +61,50 @@ export const api = {
       body: JSON.stringify({ prompt, context })
     }).then(r => r.json()),
   },
+  emailConfig: {
+    get: () => fetch(`${API_BASE}/email-config`).then(r => r.json()),
+    save: (config: {
+      fromEmail: string;
+      fromName?: string;
+      replyTo?: string;
+      schoolName?: string;
+      subjectPrefix?: string;
+      enabled?: boolean;
+      resendApiKey?: string;
+    }) => fetch(`${API_BASE}/email-config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    }).then(async r => {
+      if (!r.ok) {
+        const err = await r.json();
+        throw new Error(err.error || 'Failed to save email config');
+      }
+      return r.json();
+    }),
+  },
+  sendNotifications: (notifications: Array<{
+    teacherId: string;
+    teacherName: string;
+    teacherEmail: string;
+    allocations: Array<{
+      examName: string;
+      examDate: string;
+      examTime: string;
+      roomName: string;
+      role: string;
+    }>;
+  }>) => fetch(`${API_BASE}/send-notifications`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ notifications })
+  }).then(async r => {
+    if (!r.ok) {
+      const err = await r.json();
+      throw new Error(err.error || 'Failed to send notifications');
+    }
+    return r.json();
+  }),
   users: {
     getAll: () => fetch(`${API_BASE}/users`).then(r => r.json()),
     save: (user: { email: string, name: string, role?: string }) => fetch(`${API_BASE}/users`, {

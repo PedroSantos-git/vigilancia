@@ -67,6 +67,19 @@ export interface NotificationLog {
   read: boolean;
 }
 
+export interface EmailSettings {
+  id: string;
+  resendApiKey?: string;
+  fromEmail: string;
+  fromName: string;
+  replyTo?: string;
+  schoolName: string;
+  subjectPrefix: string;
+  enabled: boolean;
+  updatedAt?: string;
+  hasApiKey?: boolean;
+}
+
 export type Language = 'pt' | 'en';
 
 export type UserRole = 'admin' | 'teacher';

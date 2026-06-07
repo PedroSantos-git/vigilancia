@@ -15,7 +15,6 @@ export interface AllocationResult {
 }
 
 type AllocationRoleKey = "invigilator1Id" | "invigilator2Id" | "substituteId";
-const PEDRO_LAST_NAME = "pedro miguel freitas dos santos";
 
 const ROLE_LABEL_PT: Record<AllocationRoleKey, string> = {
   invigilator1Id: "Vigilante 1",
@@ -34,10 +33,6 @@ function normalizeText(value: string | null | undefined): string {
 function hasNoSpecialRole(teacher: Teacher): boolean {
   const role = normalizeText(teacher.role);
   return role === "" || role === "professor" || role === "teacher";
-}
-
-function isPedroTeacher(teacher: Teacher): boolean {
-  return normalizeText(teacher.name) === PEDRO_LAST_NAME;
 }
 
 function isTeacherUnavailableOnDate(teacher: Teacher, date: string): boolean {
@@ -118,39 +113,15 @@ function incrementAssignmentCount(assignmentCounts: Map<string, number>, teacher
   assignmentCounts.set(teacherId, getAssignmentCount(assignmentCounts, teacherId) + 1);
 }
 
-function canAssignPedroByRound(basePool: Teacher[], assignmentCounts: Map<string, number>, pedro: Teacher): boolean {
-  const nonPedroPool = basePool.filter(teacher => !isPedroTeacher(teacher));
-  if (nonPedroPool.length === 0) return true;
-
-  const pedroCount = getAssignmentCount(assignmentCounts, pedro.id);
-  const minNonPedroCount = Math.min(...nonPedroPool.map(teacher => getAssignmentCount(assignmentCounts, teacher.id)));
-
-  // Pedro only receives the next assignment after all other eligible teachers reached that round.
-  return pedroCount < minNonPedroCount;
-}
-
 function pickCandidateForPhase(
   candidates: Teacher[],
-  basePool: Teacher[],
+  _basePool: Teacher[],
   assignmentCounts: Map<string, number>
 ): Teacher | null {
   if (candidates.length === 0) return null;
 
-  const nonPedroCandidates = candidates.filter(teacher => !isPedroTeacher(teacher));
-  let pool = nonPedroCandidates;
-
-  // Pedro is only considered when there are no other candidates for the slot.
-  if (pool.length === 0) {
-    pool = candidates.filter(teacher => {
-      if (!isPedroTeacher(teacher)) return true;
-      return canAssignPedroByRound(basePool, assignmentCounts, teacher);
-    });
-  }
-
-  if (pool.length === 0) return null;
-
-  const minAssignedCount = Math.min(...pool.map(teacher => getAssignmentCount(assignmentCounts, teacher.id)));
-  const leastUsedPool = pool.filter(teacher => getAssignmentCount(assignmentCounts, teacher.id) === minAssignedCount);
+  const minAssignedCount = Math.min(...candidates.map(teacher => getAssignmentCount(assignmentCounts, teacher.id)));
+  const leastUsedPool = candidates.filter(teacher => getAssignmentCount(assignmentCounts, teacher.id) === minAssignedCount);
   return randomPick(leastUsedPool);
 }
 

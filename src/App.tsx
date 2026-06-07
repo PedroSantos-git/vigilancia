@@ -30,6 +30,7 @@ import NotificationSender from './components/NotificationSender';
 import ExamRoomManager from './components/ExamRoomManager';
 import UserManager from './components/UserManager';
 import RoleManager from './components/RoleManager';
+import EmailConfigManager from './components/EmailConfigManager';
 
 // Icons
 import { 
@@ -46,6 +47,7 @@ import {
   Layers,
   Lock,
   Tag,
+  Mail,
   Loader2,
   CheckCircle2,
   AlertTriangle
@@ -764,6 +766,19 @@ export default function App() {
               <FileText className="h-4 w-4" />
               <span>{t.tabReports}</span>
             </button>
+            {session.role === 'admin' && (
+              <button
+                onClick={() => setActiveTab('emailConfig')}
+                className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                  activeTab === 'emailConfig'
+                    ? 'bg-blue-50 text-blue-800 border-l-4 border-blue-600'
+                    : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <Mail className="h-4 w-4" />
+                <span>{t.tabEmailConfig}</span>
+              </button>
+            )}
             <button
               onClick={() => setActiveTab('backup')}
               className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition cursor-pointer ${
@@ -875,6 +890,9 @@ export default function App() {
                   rooms={rooms} 
                   allocations={allocations} 
                 />
+              )}
+              {activeTab === 'emailConfig' && session.role === 'admin' && (
+                <EmailConfigManager lang={lang} />
               )}
               {activeTab === 'backup' && (
                 <BackupLogs 

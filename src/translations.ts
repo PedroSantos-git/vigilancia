@@ -29,6 +29,7 @@ export const translations = {
     tabSchedule: "Alocações & Escala",
     tabReports: "Relatórios & Exportar",
     tabNotifications: "Enviar Notificações",
+    tabEmailConfig: "Config Email",
     tabBackup: "Nuvem & Backup",
 
     // Dashboard
@@ -186,6 +187,8 @@ export const translations = {
     tabExamRooms: "Exam Rooms Association",
     tabSchedule: "Allocations & Roster",
     tabReports: "Reports & Export",
+    tabNotifications: "Send Notifications",
+    tabEmailConfig: "Email Config",
     tabBackup: "Cloud & Backup",
 
     // Dashboard

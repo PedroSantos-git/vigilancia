@@ -5,8 +5,8 @@
 
 import React, { useState } from 'react';
 import { Language, Teacher, Exam, Room, Allocation } from '../types';
-import { translations } from '../translations';
-import { Mail, Send, CheckCircle, Clock } from 'lucide-react';
+import { Mail, Send, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { api } from '../utils/api';
 
 interface NotificationSenderProps {
   lang: Language;
@@ -23,15 +23,15 @@ export default function NotificationSender({
   rooms,
   allocations
 }: NotificationSenderProps) {
-  const t = translations[lang];
   const [isSending, setIsSending] = useState(false);
   const [sentCount, setSentCount] = useState(0);
+  const [failedCount, setFailedCount] = useState(0);
+  const [lastError, setLastError] = useState('');
 
-  // Group allocations by teacher
   const teacherAllocations = teachers.map(teacher => {
-    const myAllocations = allocations.filter(a => 
-      a.invigilator1Id === teacher.id || 
-      a.invigilator2Id === teacher.id || 
+    const myAllocations = allocations.filter(a =>
+      a.invigilator1Id === teacher.id ||
+      a.invigilator2Id === teacher.id ||
       a.substituteId === teacher.id
     );
 
@@ -51,16 +51,58 @@ export default function NotificationSender({
   }).filter(item => item.allocations.length > 0);
 
   const handleSendEmails = async () => {
-    if (!confirm(lang === 'pt' ? 'Deseja preparar o envio de notificações por email para todos os docentes com vigilâncias atribuídas?' : 'Do you want to prepare email notifications for all teachers with assigned invigilations?')) {
+    if (!confirm(lang === 'pt'
+      ? 'Deseja enviar notificações por email (via Resend) para todos os docentes com vigilâncias atribuídas?'
+      : 'Do you want to send email notifications (via Resend) to all teachers with assigned invigilations?'
+    )) {
       return;
     }
 
     setIsSending(true);
-    // Simulation of preparing notifications
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    setSentCount(teacherAllocations.length);
-    setIsSending(false);
-    alert(lang === 'pt' ? `Notificações preparadas para ${teacherAllocations.length} docentes.` : `Notifications prepared for ${teacherAllocations.length} teachers.`);
+    setLastError('');
+    setSentCount(0);
+    setFailedCount(0);
+
+    try {
+      const payload = teacherAllocations.map(({ teacher, allocations: allocs }) => ({
+        teacherId: teacher.id,
+        teacherName: teacher.name,
+        teacherEmail: teacher.email || '',
+        allocations: allocs.map(alloc => ({
+          examName: alloc.exam!.name,
+          examDate: alloc.exam!.date,
+          examTime: alloc.exam!.time,
+          roomName: alloc.room!.name,
+          role: alloc.role
+        }))
+      }));
+
+      const result = await api.sendNotifications(payload);
+      setSentCount(result.sentCount);
+      setFailedCount(result.failedCount);
+
+      if (result.failedCount > 0 || result.skippedCount > 0) {
+        const details = result.results
+          ?.filter((r: { success: boolean }) => !r.success)
+          .map((r: { teacherName: string; error?: string }) => `${r.teacherName}: ${r.error || 'erro'}`)
+          .join('\n');
+        alert(lang === 'pt'
+          ? `Enviados: ${result.sentCount}. Falhados: ${result.failedCount}. Sem email: ${result.skippedCount}.\n\n${details || ''}`
+          : `Sent: ${result.sentCount}. Failed: ${result.failedCount}. No email: ${result.skippedCount}.\n\n${details || ''}`
+        );
+      } else {
+        alert(lang === 'pt'
+          ? `${result.sentCount} notificações enviadas com sucesso via Resend.`
+          : `${result.sentCount} notifications sent successfully via Resend.`
+        );
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : (lang === 'pt' ? 'Erro ao enviar notificações.' : 'Error sending notifications.');
+      setLastError(message);
+      alert(message);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   return (
@@ -68,12 +110,12 @@ export default function NotificationSender({
       <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
         <div>
           <h2 className="text-xl font-bold tracking-tight mb-1">
-            {lang === 'pt' ? 'Preparar Notificações por Email' : 'Prepare Email Notifications'}
+            {lang === 'pt' ? 'Enviar Notificações por Email' : 'Send Email Notifications'}
           </h2>
           <p className="text-slate-400 text-xs">
-            {lang === 'pt' 
-              ? 'Gere a lista de avisos de vigilância para enviar aos docentes.' 
-              : 'Generate the list of invigilation notices to send to teachers.'}
+            {lang === 'pt'
+              ? 'Envia avisos de vigilância aos docentes via Resend.'
+              : 'Send invigilation notices to teachers via Resend.'}
           </p>
         </div>
         <button
@@ -85,6 +127,30 @@ export default function NotificationSender({
           <span>{lang === 'pt' ? 'Enviar Notificações' : 'Send Notifications'}</span>
         </button>
       </div>
+
+      {(sentCount > 0 || failedCount > 0) && (
+        <div className="flex gap-3">
+          {sentCount > 0 && (
+            <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 text-xs px-4 py-2 rounded-lg">
+              <CheckCircle className="h-4 w-4" />
+              {sentCount} {lang === 'pt' ? 'enviados' : 'sent'}
+            </div>
+          )}
+          {failedCount > 0 && (
+            <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-xs px-4 py-2 rounded-lg">
+              <AlertCircle className="h-4 w-4" />
+              {failedCount} {lang === 'pt' ? 'falhados' : 'failed'}
+            </div>
+          )}
+        </div>
+      )}
+
+      {lastError && (
+        <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-xs px-4 py-3 rounded-lg">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {lastError}
+        </div>
+      )}
 
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
         <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
@@ -104,7 +170,9 @@ export default function NotificationSender({
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="space-y-1">
                     <h4 className="font-bold text-slate-900 text-sm">{teacher.name}</h4>
-                    <p className="text-xs text-slate-500">{teacher.email}</p>
+                    <p className={`text-xs ${teacher.email ? 'text-slate-500' : 'text-red-500 font-semibold'}`}>
+                      {teacher.email || (lang === 'pt' ? 'Sem email registado' : 'No email registered')}
+                    </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {allocations.map((alloc, idx) => (

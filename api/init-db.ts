@@ -23,6 +23,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await sql`ALTER TABLE exams ADD COLUMN IF NOT EXISTS room_ids JSONB DEFAULT '[]'::jsonb`;
     await sql`ALTER TABLE rooms ADD COLUMN IF NOT EXISTS priority INTEGER DEFAULT 0`;
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS email_settings (
+          id TEXT PRIMARY KEY DEFAULT 'default',
+          resend_api_key TEXT,
+          from_email TEXT NOT NULL DEFAULT '',
+          from_name TEXT NOT NULL DEFAULT '',
+          reply_to TEXT,
+          school_name TEXT NOT NULL DEFAULT 'Escola Secundária',
+          subject_prefix TEXT NOT NULL DEFAULT 'Vigilância de Exame',
+          enabled BOOLEAN NOT NULL DEFAULT FALSE,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `;
+
+    await sql`
+      INSERT INTO email_settings (id)
+      VALUES ('default')
+      ON CONFLICT (id) DO NOTHING;
+    `;
+
     if (mode === 'repair') {
       return res.status(200).json({ message: 'Database schema repaired successfully' });
     }
