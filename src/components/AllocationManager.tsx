@@ -75,14 +75,23 @@ export default function AllocationManager({
   // Get allocations for this exam
   const examAllocations = Array.isArray(allocations) ? allocations.filter(a => a.examId === currentExam.id) : [];
 
-  // Filter rooms associated with this exam. If none associated, default to all rooms
+  // Filter rooms associated with this exam.
   const hasSpecificRooms = Array.isArray(currentExam.roomIds) && currentExam.roomIds.length > 0;
-  const filteredRooms = hasSpecificRooms 
-    ? rooms.filter(room => currentExam.roomIds?.includes(room.id))
-    : rooms;
+  
+  if (!hasSpecificRooms) {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-10 text-center text-amber-800 text-xs">
+        <AlertTriangle className="h-8 w-8 text-amber-500 mx-auto mb-3" />
+        <p className="font-bold mb-1">Este exame não tem salas atribuídas.</p>
+        <p>Por favor, associe salas a este exame no menu "Associações Salas/Exames" para poder definir os vigilantes.</p>
+      </div>
+    );
+  }
 
-  // Create allocation shells if not present
-  const activeRoomsAllocations = Array.isArray(filteredRooms) ? filteredRooms.map(room => {
+  const filteredRooms = rooms.filter(room => currentExam.roomIds?.includes(room.id));
+
+  // Create allocation shells
+  const activeRoomsAllocations = filteredRooms.map(room => {
     let existing = examAllocations.find(a => a.roomId === room.id);
     if (!existing) {
       existing = {
@@ -98,7 +107,7 @@ export default function AllocationManager({
       room,
       allocation: existing
     };
-  }) : [];
+  });
 
   // Check if a teacher is busy elsewhere at the exact same day/time (excluding current exam/room)
   const isTeacherBusyElsewhere = (teacherId: string, currentAllocId: string): boolean => {
@@ -205,7 +214,9 @@ export default function AllocationManager({
                className="bg-transparent border-none font-bold text-blue-600 focus:outline-none cursor-pointer"
              >
               {exams.map(ex => (
-                <option key={ex.id} value={ex.id}>{ex.name}</option>
+                <option key={ex.id} value={ex.id}>
+                  {ex.name} ({ex.year}º Ano) | {ex.date} • {ex.time} | Fase {ex.phase} | {ex.code} | {ex.variant || 'Standard'}
+                </option>
               ))}
             </select>
           </div>
@@ -276,6 +287,7 @@ export default function AllocationManager({
           // Validate staff statuses
           const val1 = getTeacherValidationState(allocation.invigilator1Id, allocation.id, 'Vigilante 1');
           const val2 = getTeacherValidationState(allocation.invigilator2Id, allocation.id, 'Vigilante 2');
+          const val3 = getTeacherValidationState(allocation.substituteId, allocation.id, 'Suplente');
 
           // Build option list with live filters
           const buildOptionList = (
@@ -326,7 +338,7 @@ export default function AllocationManager({
                 </div>
 
                 {/* Selection Selectors Block (col-span-9) */}
-                <div className="lg:col-span-9 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="lg:col-span-9 grid grid-cols-1 gap-4">
                   
                   {/* Select 1: Vigilante 1 */}
                   <div className="space-y-1.5 font-sans">
@@ -436,6 +448,60 @@ export default function AllocationManager({
                     </div>
                   </div>
 
+                  {/* Select 3: Suplente por Sala */}
+                  <div className="space-y-1.5 font-sans">
+                    <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500">
+                      {t.substitute} (Obrigatório por Sala)
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <select
+                        value={allocation.substituteId || ''}
+                        onChange={(e) => handleSelectTeacher(allocation, room.id, 'substituteId', e.target.value)}
+                        className="flex-1 bg-slate-50 border border-slate-200 hover:border-slate-300 text-slate-800 font-medium py-1.5 px-2.5 rounded-lg text-xs focus:outline-none focus:bg-white"
+                      >
+                        <option value="">-- {t.manualOptionSelect} --</option>
+                        {optionsList(allocation.substituteId, 'substituteId').map((tchr) => (
+                          <option key={tchr.id} value={tchr.id}>
+                            {tchr.name} ({tchr.subject_group} - {tchr.subject})
+                          </option>
+                        ))}
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={() => setPickerSlot({
+                          allocation,
+                          roomId: room.id,
+                          roleKey: 'substituteId',
+                          roleLabel: 'Suplente',
+                          roomName: room.name
+                        })}
+                        title={lang === 'pt' ? "Abrir Pesquisa de Docentes" : "Open Search Picker"}
+                        className="p-1.5 bg-slate-50 hover:bg-slate-200 border border-slate-200 hover:border-slate-300 text-slate-600 hover:text-slate-900 rounded-lg transition cursor-pointer flex-shrink-0"
+                      >
+                        <Search className="h-3.5 w-3.5" />
+                      </button>
+
+                      {allocation.substituteId && (
+                        <button
+                          type="button"
+                          onClick={() => handleSelectTeacher(allocation, room.id, 'substituteId', '')}
+                          title={lang === 'pt' ? "Remover Professor" : "Remove Assignment"}
+                          className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-650 text-rose-600 rounded-lg transition border border-rose-200 cursor-pointer flex-shrink-0"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    {/* Inline helper message */}
+                    <div className="flex items-center space-x-1.5 text-[10px] pl-1 font-medium select-none">
+                      {val3.state === 'valid' && <CheckCircle className="h-3 w-3 text-blue-600" />}
+                      {(val3.state === 'critical' || val3.state === 'conflict_busy') && <ShieldAlert className="h-3 w-3 text-rose-500" />}
+                      {val3.state === 'conflict_subject' && <AlertTriangle className="h-3 w-3 text-amber-500" />}
+                      <span className={val3.color}>{val3.label}</span>
+                    </div>
+                  </div>
+
                 </div>
 
               </div>
@@ -444,114 +510,7 @@ export default function AllocationManager({
         })}
       </div>
 
-      {/* Central Standby Pool (Suplentes de Reserva Geral) */}
-      <div className="bg-slate-50 border border-blue-100 rounded-xl p-6 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-          <div>
-            <h3 className="font-bold text-slate-900 text-sm flex items-center space-x-2">
-              <SchoolShipIcon className="h-5 w-5 text-blue-600 flex-shrink-0 font-bold" color="#2563eb" />
-              <span>{lang === 'pt' ? 'Corpo de Professores Suplentes (Reserva Geral)' : 'Standby Substitute Teachers Pool (General Reserve)'}</span>
-            </h3>
-            <p className="text-slate-500 text-[11px] mt-0.5">
-              {lang === 'pt'
-                ? 'Estes docentes não estão alocados a nenhuma sala específica. Devem comparecer no secretariado à hora marcada para a realização do exame para apoio geral e distribuição dinâmica conforme as necessidades de última hora.'
-                : 'These teachers are not assigned to a specific room. They must report to the secretariat at the scheduled time of the exam for general standby support and dynamic allocation.'}
-            </p>
-          </div>
-          <div className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-150 px-2.5 py-1 rounded-full uppercase tracking-wider font-mono">
-            {activeRoomsAllocations.length === 1 
-              ? (lang === 'pt' ? '1 Posição Requerida (1 Sala)' : '1 Position Required (1 Room)')
-              : (lang === 'pt' ? `${activeRoomsAllocations.length} Posições Requeridas (${activeRoomsAllocations.length} Salas)` : `${activeRoomsAllocations.length} Positions Required (${activeRoomsAllocations.length} Rooms)`)}
-          </div>
-        </div>
 
-        {/* 1 standby slot per active room */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {activeRoomsAllocations.map(({ room, allocation }, idx) => {
-            const slotLabel = lang === 'pt' ? `Suplente de Apoio Geral ${idx + 1}` : `General Standby ${idx + 1}`;
-            const val = getTeacherValidationState(allocation.substituteId, allocation.id, slotLabel);
-            
-            const getStandbyOptionsList = (currentSelectedId: string | null) => {
-              return teachers.filter(tchr => {
-                if (tchr.id === currentSelectedId) return true;
-                
-                // Exclude if already assigned as invigilator 1 or invigilator 2 in this exact room/allocation
-                const isAssignedElsewhereInRoom = 
-                  allocation.invigilator1Id === tchr.id ||
-                  allocation.invigilator2Id === tchr.id;
-                if (isAssignedElsewhereInRoom) return false;
-
-                if (!tchr.available || isTeacherUnavailableAt(tchr, currentExam.date, currentExam.time)) return false;
-                if (hideBusy && isTeacherBusyElsewhere(tchr.id, allocation.id)) return false;
-                if (hideIncompatible && hasSubjectConflict(tchr, currentExam)) return false;
-
-                return true;
-              });
-            };
-
-            return (
-              <div key={allocation.id} className="bg-white border border-slate-200 rounded-xl p-4 space-y-1.5 shadow-sm font-sans flex flex-col justify-between">
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500">
-                      {slotLabel}
-                    </label>
-                    <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono font-bold">
-                       {lang === 'pt' ? `Suplente ${idx + 1}` : `Standby ${idx + 1}`}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <select
-                      value={allocation.substituteId || ''}
-                      onChange={(e) => handleSelectTeacher(allocation, room.id, 'substituteId', e.target.value)}
-                      className="flex-1 bg-slate-50 border border-slate-200 hover:border-slate-300 text-slate-800 font-medium py-1.5 px-2.5 rounded-lg text-xs focus:outline-none focus:bg-white"
-                    >
-                      <option value="">-- {t.manualOptionSelect} --</option>
-                      {getStandbyOptionsList(allocation.substituteId).map((tchr) => (
-                        <option key={tchr.id} value={tchr.id}>
-                          {tchr.name} ({tchr.subject_group} - {tchr.subject})
-                        </option>
-                      ))}
-                    </select>
-
-                    <button
-                      type="button"
-                      onClick={() => setPickerSlot({
-                        allocation,
-                        roomId: room.id,
-                        roleKey: 'substituteId',
-                        roleLabel: slotLabel,
-                        roomName: lang === 'pt' ? 'Reserva de Apoio Geral' : 'General Standby Support'
-                      })}
-                      title={lang === 'pt' ? "Abrir Pesquisa de Docentes" : "Open Search Picker"}
-                      className="p-1.5 bg-slate-50 hover:bg-slate-200 border border-slate-200 hover:border-slate-300 text-slate-600 hover:text-slate-900 rounded-lg transition cursor-pointer flex-shrink-0"
-                    >
-                      <Search className="h-3.5 w-3.5" />
-                    </button>
-
-                    {allocation.substituteId && (
-                      <button
-                        type="button"
-                        onClick={() => handleSelectTeacher(allocation, room.id, 'substituteId', '')}
-                        title={lang === 'pt' ? "Remover Professor" : "Remove Assignment"}
-                        className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-650 text-rose-600 rounded-lg transition border border-rose-200 cursor-pointer flex-shrink-0"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center space-x-1.5 text-[10px] pl-1 pt-1.5 font-medium select-none border-t border-slate-50 mt-1.5">
-                  {val.state === 'valid' && <CheckCircle className="h-3 w-3 text-blue-600" />}
-                  {(val.state === 'critical' || val.state === 'conflict_busy') && <ShieldAlert className="h-3 w-3 text-rose-500" />}
-                  {val.state === 'conflict_subject' && <AlertTriangle className="h-3 w-3 text-amber-500" />}
-                  <span className={val.color}>{val.label}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
 
       {/* Manual Picker Modal Overlay */}
       {pickerSlot && (

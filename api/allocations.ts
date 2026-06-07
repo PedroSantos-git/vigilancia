@@ -44,8 +44,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(201).json({ message: 'Allocation saved' });
 
       case 'DELETE':
-        const { examId: deleteExamId } = req.query;
-        if (deleteExamId) {
+        const { examId: deleteExamId, all } = req.query;
+        if (all === 'true') {
+          await sql`DELETE FROM allocations`;
+        } else if (deleteExamId) {
           await sql`DELETE FROM allocations WHERE exam_id = ${deleteExamId as string}`;
         }
         return res.status(200).json({ message: 'Allocations deleted' });

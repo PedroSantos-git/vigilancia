@@ -96,12 +96,12 @@ export default function AdminDashboard({
   const unavailableTeachersCount = totalTeachers - availableTeachers.length;
 
   // Let's calculate coverage
-  // Total roles needing invigilators: each exam needs 2 invigilators + 1 substitute per room associated to it
+  // Total roles needing invigilators: each exam needs 2 invigilators + 1 substitute PER ROOM assigned
   let totalRolesNeeded = 0;
   if (Array.isArray(exams)) {
     exams.forEach(ex => {
-      // If no rooms are assigned yet, assume 1 room as base requirement
-      const examRoomsCount = Array.isArray(ex.roomIds) && ex.roomIds.length > 0 ? ex.roomIds.length : 1;
+      // Rule: if no rooms are assigned, zero invigilators needed
+      const examRoomsCount = Array.isArray(ex.roomIds) ? ex.roomIds.length : 0;
       totalRolesNeeded += examRoomsCount * 3;
     });
   }
@@ -109,9 +109,13 @@ export default function AdminDashboard({
   let rolesFilledCount = 0;
   if (Array.isArray(allocations)) {
     allocations.forEach(alloc => {
-      if (alloc.invigilator1Id) rolesFilledCount++;
-      if (alloc.invigilator2Id) rolesFilledCount++;
-      if (alloc.substituteId) rolesFilledCount++;
+      const exam = exams.find(e => e.id === alloc.examId);
+      // Only count allocations for rooms that are still associated to the exam
+      if (exam && Array.isArray(exam.roomIds) && exam.roomIds.includes(alloc.roomId)) {
+        if (alloc.invigilator1Id) rolesFilledCount++;
+        if (alloc.invigilator2Id) rolesFilledCount++;
+        if (alloc.substituteId) rolesFilledCount++;
+      }
     });
   }
 

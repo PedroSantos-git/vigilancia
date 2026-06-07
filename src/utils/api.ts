@@ -44,6 +44,7 @@ export const api = {
       body: JSON.stringify(allocation)
     }).then(r => r.json()),
     deleteByExam: (examId: string) => fetch(`${API_BASE}/allocations?examId=${examId}`, { method: 'DELETE' }).then(r => r.json()),
+    clearAll: () => fetch(`${API_BASE}/allocations?all=true`, { method: 'DELETE' }).then(r => r.json())
   },
   notifications: {
     getAll: () => fetch(`${API_BASE}/notifications`).then(r => r.json()),

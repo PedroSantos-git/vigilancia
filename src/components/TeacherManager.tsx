@@ -164,24 +164,6 @@ export default function TeacherManager({
           <p className="text-slate-500 text-xs">{t.teacherSubtitle}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {teachers.length > 0 && (
-            <button
-              onClick={handleClearAllClick}
-              className={`flex items-center space-x-1.5 text-xs font-semibold px-3.5 py-2 rounded-lg transition border cursor-pointer ${
-                isConfirmingClear
-                  ? 'bg-rose-600 hover:bg-rose-750 text-white border-rose-600 animate-pulse'
-                  : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
-              }`}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              <span>
-                {isConfirmingClear 
-                  ? (lang === 'pt' ? 'Confirmar Remoção?' : 'Confirm Delete All?') 
-                  : (lang === 'pt' ? 'Remover Todos' : 'Remove All')}
-              </span>
-            </button>
-          )}
-
           <button
             onClick={handleOpenAdd}
             className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition shadow cursor-pointer"

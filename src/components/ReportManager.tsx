@@ -132,47 +132,42 @@ export default function ReportManager({
           <h2 className="text-xl font-bold text-slate-800">{t.tabReports}</h2>
           <p className="text-slate-500 text-xs">Análise de esforço e exportação oficial</p>
         </div>
-        <button
-          onClick={handleExportPDF}
-          className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-lg text-xs font-semibold shadow-sm transition cursor-pointer"
-        >
-          <Download className="h-4 w-4" />
-          <span>Exportar Escala Oficial (PDF)</span>
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              const doc = new jsPDF();
+              doc.text(lang === 'pt' ? 'Lista de Professores' : 'Teachers List', 10, 10);
+              const headers = [[lang === 'pt' ? 'Nome' : 'Name', lang === 'pt' ? 'Grupo' : 'Group', 'Email']];
+              const data = teachers.map(t => [t.name, t.subject_group, t.email || '-']);
+              autoTable(doc, { head: headers, body: data, startY: 20 });
+              doc.save(`professores_${new Date().toISOString().slice(0, 10)}.pdf`);
+            }}
+            className="flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2.5 rounded-lg text-xs font-semibold shadow-sm transition cursor-pointer"
+          >
+            <Download className="h-4 w-4" />
+            <span>{lang === 'pt' ? 'Exportar Professores (PDF)' : 'Export Teachers (PDF)'}</span>
+          </button>
+          <button
+            onClick={handleExportPDF}
+            className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-lg text-xs font-semibold shadow-sm transition cursor-pointer"
+          >
+            <Download className="h-4 w-4" />
+            <span>Exportar Escala Oficial (PDF)</span>
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-          <div className="flex items-center space-x-2 mb-6">
-            <FileText className="h-5 w-5 text-blue-600" />
-            <h3 className="font-bold text-slate-800">Estatísticas de Vigilâncias</h3>
-          </div>
-          <div className="space-y-3">
-            {teacherStats.slice(0, 10).map(({ teacher, count }) => (
-              <div key={teacher.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
-                <div className="flex flex-col">
-                  <span className="text-sm font-bold text-slate-800">{teacher.name}</span>
-                  <span className="text-[10px] text-slate-500">{teacher.subject}</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className="text-lg font-bold text-blue-600">{count}</span>
-                  <span className="text-[10px] text-slate-400 uppercase font-bold">vig.</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
+      <div className="grid grid-cols-1 gap-6">
         <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
           <div className="flex items-center space-x-2 mb-6">
             <CheckCircle className="h-5 w-5 text-emerald-600" />
-            <h3 className="font-bold text-slate-800">Estado de Cobertura</h3>
+            <h3 className="font-bold text-slate-800">Estado de Cobertura das Salas</h3>
           </div>
           <div className="text-center py-10">
             <div className="inline-flex items-center justify-center h-32 w-32 rounded-full border-8 border-slate-100 border-t-emerald-500 mb-4">
               <span className="text-2xl font-bold text-slate-800">100%</span>
             </div>
-            <p className="text-sm text-slate-500">Todas as salas têm vigilantes atribuídos.</p>
+            <p className="text-sm text-slate-500">Todas as salas configuradas têm vigilantes e suplentes atribuídos.</p>
           </div>
         </div>
       </div>

@@ -137,13 +137,6 @@ export default function RoleManager({ lang }: RoleManagerProps) {
               : 'Define roles that can be assigned to teachers.'}
           </p>
         </div>
-        <button
-          onClick={() => setShowImport(!showImport)}
-          className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg text-xs font-bold transition border border-slate-700"
-        >
-          {showImport ? <X className="h-4 w-4" /> : <Upload className="h-4 w-4" />}
-          {showImport ? (lang === 'pt' ? 'Cancelar' : 'Cancel') : (lang === 'pt' ? 'Importar Texto' : 'Import Text')}
-        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

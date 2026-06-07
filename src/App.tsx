@@ -178,8 +178,15 @@ export default function App() {
   };
 
   const handleUpdateAllRooms = async (updatedRooms: Room[]) => {
-    await api.rooms.updateAll(updatedRooms);
+    // Update local state immediately for instant feedback
     setRooms(sortRooms(updatedRooms));
+    
+    try {
+      await api.rooms.updateAll(updatedRooms);
+    } catch (err) {
+      console.error('Error saving room order:', err);
+      // Optional: rollback if needed, but for UX we keep the local state
+    }
   };
 
   const handleAddExam = async (exam: Exam) => {
@@ -261,6 +268,16 @@ export default function App() {
   };
 
   const handleAutoTriggerAll = async () => {
+    // Rule: All exams must have at least one room assigned
+    const examsWithoutRooms = exams.filter(ex => !ex.roomIds || ex.roomIds.length === 0);
+    if (examsWithoutRooms.length > 0) {
+      alert(lang === 'pt' 
+        ? `Não é possível realizar a distribuição automática: ${examsWithoutRooms.length} exames não têm salas atribuídas. Por favor, atribua salas a todos os exames primeiro.`
+        : `Cannot run auto-allocate: ${examsWithoutRooms.length} exams have no rooms assigned. Please assign rooms to all exams first.`
+      );
+      return;
+    }
+
     setIsLoading(true);
     try {
       const allNewAllocations: Allocation[] = [];
@@ -289,10 +306,20 @@ export default function App() {
   };
 
   const handleClearAllocationsAll = async () => {
-    for (const ex of exams) {
-      await api.allocations.deleteByExam(ex.id);
+    setIsLoading(true);
+    try {
+      await api.allocations.clearAll();
+      // Clear local state immediately to avoid sync issues
+      setAllocations([]);
+      // Force a re-fetch to be absolutely sure
+      const freshAllocations = await api.allocations.getAll();
+      setAllocations(Array.isArray(freshAllocations) ? freshAllocations : []);
+    } catch (err) {
+      console.error('Error clearing allocations:', err);
+      alert('Erro ao limpar alocações.');
+    } finally {
+      setIsLoading(false);
     }
-    setAllocations([]);
   };
 
   const setSelectedTabContext = (targetTab: string) => {
