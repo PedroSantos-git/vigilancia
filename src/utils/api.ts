@@ -62,7 +62,7 @@ export const api = {
     }).then(r => r.json()),
   },
   emailConfig: {
-    get: () => fetch(`${API_BASE}/email-config`).then(r => r.json()),
+    get: () => fetch(`${API_BASE}/notifications?type=config`).then(r => r.json()),
     save: (config: {
       fromEmail: string;
       fromName?: string;
@@ -71,10 +71,10 @@ export const api = {
       subjectPrefix?: string;
       enabled?: boolean;
       resendApiKey?: string;
-    }) => fetch(`${API_BASE}/email-config`, {
+    }) => fetch(`${API_BASE}/notifications`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config)
+      body: JSON.stringify({ action: 'saveConfig', ...config })
     }).then(async r => {
       if (!r.ok) {
         const err = await r.json();
@@ -94,10 +94,10 @@ export const api = {
       roomName: string;
       role: string;
     }>;
-  }>) => fetch(`${API_BASE}/send-notifications`, {
+  }>) => fetch(`${API_BASE}/notifications`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ notifications })
+    body: JSON.stringify({ action: 'send', notifications })
   }).then(async r => {
     if (!r.ok) {
       const err = await r.json();
