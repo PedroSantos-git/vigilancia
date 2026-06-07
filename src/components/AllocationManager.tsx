@@ -20,7 +20,7 @@ import {
   Home,
   Layers
 } from 'lucide-react';
-import { hasSubjectConflict, isTeacherUnavailableAt, getPeriodFromTime } from '../utils/scheduler';
+import { hasSubjectConflict, isTeacherUnavailableAt } from '../utils/scheduler';
 
 interface AllocationManagerProps {
   lang: Language;
@@ -123,14 +123,14 @@ export default function AllocationManager({
     };
   });
 
-  // Check if a teacher is busy elsewhere at the exact same day/time (excluding current exam/room)
+  // Check if a teacher is busy elsewhere on the same day (excluding current exam/room)
   const isTeacherBusyElsewhere = (teacherId: string, currentAllocId: string): boolean => {
     if (!Array.isArray(allocations)) return false;
     return allocations.some(alloc => {
       if (alloc.id === currentAllocId) return false;
       const ex = exams.find(e => e.id === alloc.examId);
       if (!ex) return false;
-      if (ex.date === currentExam.date && getPeriodFromTime(ex.time) === getPeriodFromTime(currentExam.time)) {
+      if (ex.date === currentExam.date) {
         return (
           alloc.invigilator1Id === teacherId ||
           alloc.invigilator2Id === teacherId ||

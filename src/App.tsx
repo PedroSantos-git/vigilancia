@@ -15,7 +15,7 @@ import {
   UserSession 
 } from './types';
 import { translations } from './translations';
-import { autoAllocate, autoAllocateRooms } from './utils/scheduler';
+import { autoAllocate, autoAllocateAll, autoAllocateRooms } from './utils/scheduler';
 
 // Subcomponents
 import LoginScreen from './components/LoginScreen';
@@ -45,7 +45,10 @@ import {
   Globe,
   Layers,
   Lock,
-  Tag
+  Tag,
+  Loader2,
+  CheckCircle2,
+  AlertTriangle
 } from 'lucide-react';
 
 import { SchoolShipIcon } from './components/SchoolLogo';
@@ -58,6 +61,23 @@ const sortRooms = (list: Room[]): Room[] => {
   });
 };
 
+type OperationLogLevel = 'info' | 'warn' | 'error';
+
+interface OperationLogEntry {
+  id: number;
+  level: OperationLogLevel;
+  message: string;
+  timestamp: string;
+}
+
+interface OperationState {
+  open: boolean;
+  title: string;
+  progress: number;
+  status: 'idle' | 'running' | 'done' | 'error';
+  logs: OperationLogEntry[];
+}
+
 export default function App() {
   // Locale state
   const [lang, setLang] = useState<Language>('pt');
@@ -68,6 +88,13 @@ export default function App() {
   const [exams, setExams] = useState<Exam[]>([]);
   const [allocations, setAllocations] = useState<Allocation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [operationState, setOperationState] = useState<OperationState>({
+    open: false,
+    title: '',
+    progress: 0,
+    status: 'idle',
+    logs: []
+  });
 
   // NextAuth Session
   const { data: nextSession, status: nextStatus } = useSession();
@@ -132,6 +159,60 @@ export default function App() {
   }, [session]);
 
   const t = translations[lang];
+
+  const nowStamp = () => new Date().toLocaleTimeString(lang === 'pt' ? 'pt-PT' : 'en-US');
+  const waitForUiTick = () => new Promise<void>(resolve => setTimeout(resolve, 0));
+
+  const beginOperation = (title: string) => {
+    setOperationState({
+      open: true,
+      title,
+      progress: 0,
+      status: 'running',
+      logs: []
+    });
+  };
+
+  const pushOperationLog = (message: string, level: OperationLogLevel = 'info') => {
+    setOperationState(prev => ({
+      ...prev,
+      logs: [
+        ...prev.logs,
+        {
+          id: prev.logs.length + 1,
+          level,
+          message,
+          timestamp: nowStamp()
+        }
+      ].slice(-800)
+    }));
+  };
+
+  const setOperationProgress = (progress: number) => {
+    setOperationState(prev => ({
+      ...prev,
+      progress: Math.max(0, Math.min(100, progress))
+    }));
+  };
+
+  const finishOperation = (status: 'done' | 'error', finalMessage?: string) => {
+    setOperationState(prev => ({
+      ...prev,
+      status,
+      progress: status === 'done' ? 100 : prev.progress
+    }));
+    if (finalMessage) {
+      pushOperationLog(finalMessage, status === 'done' ? 'info' : 'error');
+    }
+  };
+
+  const closeOperationModal = () => {
+    setOperationState(prev => ({
+      ...prev,
+      open: false,
+      status: 'idle'
+    }));
+  };
 
   // LOGOUT
   const handleLogout = () => {
@@ -235,7 +316,11 @@ export default function App() {
       return [...filtered, ...result.allocations];
     });
 
-    alert(t.automaticSuccess);
+    if (result.warnings.length > 0) {
+      alert(`${t.automaticSuccess}\n\n${result.warnings.join('\n')}`);
+    } else {
+      alert(t.automaticSuccess);
+    }
   };
 
   const handleClearAllocationsForExam = async (examId: string) => {
@@ -269,58 +354,123 @@ export default function App() {
   };
 
   const handleAutoTriggerAll = async () => {
+    if (operationState.status === 'running') return;
+
+    beginOperation(lang === 'pt' ? 'Atribuição Automática de Vigilâncias' : 'Automatic Invigilator Allocation');
+    pushOperationLog(lang === 'pt' ? 'A validar exames e salas associadas...' : 'Validating exams and assigned rooms...');
+    setOperationProgress(5);
+    await waitForUiTick();
+
     // Rule: All exams must have at least one room assigned
     const examsWithoutRooms = exams.filter(ex => !ex.roomIds || ex.roomIds.length === 0);
     if (examsWithoutRooms.length > 0) {
-      alert(lang === 'pt' 
-        ? `Não é possível realizar a distribuição automática: ${examsWithoutRooms.length} exames não têm salas atribuídas. Por favor, atribua salas a todos os exames primeiro.`
-        : `Cannot run auto-allocate: ${examsWithoutRooms.length} exams have no rooms assigned. Please assign rooms to all exams first.`
+      finishOperation(
+        'error',
+        lang === 'pt'
+          ? `Processo interrompido: ${examsWithoutRooms.length} exame(s) sem salas associadas.`
+          : `Process aborted: ${examsWithoutRooms.length} exam(s) without assigned rooms.`
       );
       return;
     }
 
-    setIsLoading(true);
     try {
-      const allNewAllocations: Allocation[] = [];
+      pushOperationLog(lang === 'pt' ? 'A gerar plano global por fases (Vigilante 1 -> Vigilante 2 -> Suplente)...' : 'Building global phased plan (Invigilator 1 -> Invigilator 2 -> Substitute)...');
+      setOperationProgress(20);
+      await waitForUiTick();
 
-      for (const ex of exams) {
-        const examCurrentAllocs = allocations.filter(a => a.examId === ex.id);
-        const examRooms = ex.roomIds && ex.roomIds.length > 0
-          ? rooms.filter(r => ex.roomIds?.includes(r.id))
-          : rooms;
-        const result = autoAllocate(ex, examRooms, teachers, allocations, examCurrentAllocs, exams);
-        
-        allNewAllocations.push(...result.allocations);
+      const planningResult = autoAllocateAll(exams, rooms, teachers);
+      pushOperationLog(
+        lang === 'pt'
+          ? `Plano gerado: ${planningResult.allocations.length} alocações.`
+          : `Plan generated: ${planningResult.allocations.length} allocations.`
+      );
+
+      setOperationProgress(35);
+      await waitForUiTick();
+
+      pushOperationLog(lang === 'pt' ? 'A limpar alocações antigas...' : 'Clearing previous allocations...');
+      await api.allocations.clearAll();
+      setOperationProgress(45);
+      await waitForUiTick();
+
+      const total = planningResult.allocations.length;
+      if (total === 0) {
+        pushOperationLog(lang === 'pt' ? 'Sem alocações para gravar.' : 'No allocations to persist.', 'warn');
       }
 
-      await Promise.all(allNewAllocations.map(alloc => api.allocations.save(alloc)));
+      for (let i = 0; i < total; i++) {
+        await api.allocations.save(planningResult.allocations[i]);
+        if ((i + 1) % 10 === 0 || i === total - 1) {
+          const persistedProgress = 45 + Math.round(((i + 1) / Math.max(total, 1)) * 45);
+          setOperationProgress(persistedProgress);
+          pushOperationLog(
+            lang === 'pt'
+              ? `Gravação em curso: ${i + 1}/${total}`
+              : `Saving in progress: ${i + 1}/${total}`
+          );
+          await waitForUiTick();
+        }
+      }
 
-      setAllocations(allNewAllocations);
+      for (const infoLog of planningResult.notifications) {
+        pushOperationLog(infoLog.message);
+      }
+      for (const warning of planningResult.warnings) {
+        pushOperationLog(warning, 'warn');
+      }
 
-      alert(t.automaticSuccess);
+      setAllocations(planningResult.allocations);
+      setOperationProgress(100);
+      finishOperation(
+        'done',
+        lang === 'pt'
+          ? 'Atribuição automática concluída. Pode rever os logs e clicar em OK.'
+          : 'Automatic allocation completed. Review the logs and click OK.'
+      );
     } catch (err) {
       console.error('Error during auto trigger all:', err);
-      alert('Erro durante a distribuição automática.');
-    } finally {
-      setIsLoading(false);
+      finishOperation('error', lang === 'pt' ? 'Erro durante a distribuição automática de vigilâncias.' : 'Error during automatic invigilator allocation.');
     }
   };
 
   const handleAutoTriggerRooms = async () => {
-    setIsLoading(true);
+    if (operationState.status === 'running') return;
+
+    beginOperation(lang === 'pt' ? 'Atribuição Automática de Salas' : 'Automatic Room Assignment');
+    pushOperationLog(lang === 'pt' ? 'A calcular disponibilidade de salas por exame...' : 'Calculating room availability per exam...');
+    setOperationProgress(10);
+    await waitForUiTick();
+
     try {
       const updatedExams = autoAllocateRooms(exams, rooms);
-      
-      // Save all updated exams
-      await Promise.all(updatedExams.map(ex => api.exams.save(ex)));
-      
+
+      pushOperationLog(lang === 'pt' ? 'A guardar atualização das salas por exame...' : 'Saving updated room assignments...');
+      const total = updatedExams.length;
+      for (let i = 0; i < total; i++) {
+        await api.exams.save(updatedExams[i]);
+        if ((i + 1) % 5 === 0 || i === total - 1) {
+          const progress = 10 + Math.round(((i + 1) / Math.max(total, 1)) * 85);
+          setOperationProgress(progress);
+          pushOperationLog(
+            lang === 'pt'
+              ? `Salas gravadas: ${i + 1}/${total}`
+              : `Rooms saved: ${i + 1}/${total}`
+          );
+          await waitForUiTick();
+        }
+      }
+
       setExams(updatedExams);
-      alert(lang === 'pt' ? 'Distribuição automática de salas concluída!' : 'Auto room allocation completed!');
+      setOperationProgress(100);
+      finishOperation(
+        'done',
+        lang === 'pt'
+          ? 'Distribuição automática de salas concluída. Pode rever os logs e clicar em OK.'
+          : 'Automatic room assignment completed. Review the logs and click OK.'
+      );
     } catch (err) {
       console.error('Error during auto trigger rooms:', err);
-      alert('Erro ao distribuir salas automaticamente.');
-    } finally {
-      setIsLoading(false);
+      finishOperation('error', lang === 'pt' ? 'Erro ao distribuir salas automaticamente.' : 'Error while assigning rooms automatically.');
     }
   };
 
@@ -584,6 +734,7 @@ export default function App() {
                   onAutoTriggerRooms={handleAutoTriggerRooms}
                   onClearAllocations={handleClearAllocationsAll}
                   onRefreshData={handleRefreshData}
+                  isSystemTaskRunning={operationState.status === 'running'}
                 />
               )}
               {activeTab === 'users' && session.role === 'admin' && (
@@ -669,6 +820,82 @@ export default function App() {
           </AnimatePresence>
         </main>
       </div>
+
+      {operationState.open && (
+        <div className="fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-3xl bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-slate-900 truncate">{operationState.title}</h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  {operationState.status === 'running'
+                    ? (lang === 'pt' ? 'Processo em execução...' : 'Process in progress...')
+                    : operationState.status === 'done'
+                      ? (lang === 'pt' ? 'Processo concluído.' : 'Process completed.')
+                      : (lang === 'pt' ? 'Processo interrompido com erro.' : 'Process stopped with error.')}
+                </p>
+              </div>
+              <div className="shrink-0">
+                {operationState.status === 'running' && <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />}
+                {operationState.status === 'done' && <CheckCircle2 className="h-5 w-5 text-emerald-600" />}
+                {operationState.status === 'error' && <AlertTriangle className="h-5 w-5 text-rose-600" />}
+              </div>
+            </div>
+
+            <div className="px-6 py-4 space-y-4">
+              <div>
+                <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
+                  <div
+                    className={`h-2 rounded-full transition-all duration-300 ${
+                      operationState.status === 'error' ? 'bg-rose-500' : 'bg-blue-600'
+                    }`}
+                    style={{ width: `${operationState.progress}%` }}
+                  />
+                </div>
+                <div className="text-[11px] text-slate-500 mt-1.5 font-medium">
+                  {operationState.progress}%
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 h-72 overflow-y-auto p-3 space-y-1.5 text-[11px] leading-relaxed">
+                {operationState.logs.length === 0 && (
+                  <p className="text-slate-400">
+                    {lang === 'pt' ? 'A aguardar início...' : 'Waiting to start...'}
+                  </p>
+                )}
+                {operationState.logs.map(log => (
+                  <div key={log.id} className="flex gap-2">
+                    <span className="text-slate-400 shrink-0 font-mono">[{log.timestamp}]</span>
+                    <span className={
+                      log.level === 'error'
+                        ? 'text-rose-700'
+                        : log.level === 'warn'
+                          ? 'text-amber-700'
+                          : 'text-slate-700'
+                    }>
+                      {log.message}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-200 bg-white flex justify-end">
+              <button
+                onClick={closeOperationModal}
+                disabled={operationState.status === 'running'}
+                className={`px-4 py-2 rounded-lg text-xs font-semibold transition ${
+                  operationState.status === 'running'
+                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-500 text-white cursor-pointer'
+                }`}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

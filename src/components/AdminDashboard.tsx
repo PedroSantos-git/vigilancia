@@ -21,7 +21,7 @@ import {
   X,
   Wrench
 } from 'lucide-react';
-import { hasSubjectConflict, getPeriodFromTime } from '../utils/scheduler';
+import { hasSubjectConflict } from '../utils/scheduler';
 import { api } from '../utils/api';
 import * as XLSX from 'xlsx';
 
@@ -35,6 +35,7 @@ interface AdminDashboardProps {
   onAutoTriggerRooms: () => void;
   onClearAllocations: () => void;
   onRefreshData: () => void;
+  isSystemTaskRunning?: boolean;
 }
 
 export default function AdminDashboard({
@@ -46,7 +47,8 @@ export default function AdminDashboard({
   onAutoTrigger,
   onAutoTriggerRooms,
   onClearAllocations,
-  onRefreshData
+  onRefreshData,
+  isSystemTaskRunning = false
 }: AdminDashboardProps) {
   const t = translations[lang];
 
@@ -175,9 +177,8 @@ export default function AdminDashboard({
           );
         }
 
-        // 2. Double booking on the same date/time session
-        const period = getPeriodFromTime(examObj.time);
-        const key = `${teacherId}_${examObj.date}_${period}`;
+        // 2. Double booking on the same date (independent of hour)
+        const key = `${teacherId}_${examObj.date}`;
         if (!assignedTwiceMap.has(key)) {
           assignedTwiceMap.set(key, []);
         }
@@ -194,15 +195,15 @@ export default function AdminDashboard({
     if (places.length > 1) {
       const teacherId = key.split('_')[0];
       const tchr = teachers.find(p => p.id === teacherId);
-      if (tchr) {
-        conflicts.push(
-          `${tchr.name} está alocado a múltiplas funções (${places.map(p => {
-            const r = rooms.find(room => room.id === p.roomId);
-            return r ? r.name : 'Desconhecida';
-          }).join(', ')}) no mesmo dia e período escolar!`
-        );
+        if (tchr) {
+          conflicts.push(
+            `${tchr.name} está alocado a múltiplas funções (${places.map(p => {
+              const r = rooms.find(room => room.id === p.roomId);
+              return r ? r.name : 'Desconhecida';
+          }).join(', ')}) no mesmo dia de exame!`
+          );
+        }
       }
-    }
   });
 
   return (
@@ -231,16 +232,18 @@ export default function AdminDashboard({
           </button>
           <button
             onClick={onAutoTriggerRooms}
-            className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition shadow shadow-blue-900/10 cursor-pointer"
+            disabled={isSystemTaskRunning}
+            className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition shadow shadow-blue-900/10 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Home className="h-3.5 w-3.5" />
+            {isSystemTaskRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Home className="h-3.5 w-3.5" />}
             <span>{lang === 'pt' ? 'Atribuir salas' : 'Assign rooms'}</span>
           </button>
           <button
             onClick={onAutoTrigger}
-            className="flex items-center space-x-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition shadow shadow-indigo-900/10 cursor-pointer"
+            disabled={isSystemTaskRunning}
+            className="flex items-center space-x-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition shadow shadow-indigo-900/10 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Users className="h-3.5 w-3.5" />
+            {isSystemTaskRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Users className="h-3.5 w-3.5" />}
             <span>{lang === 'pt' ? 'Atribuir vigilantes' : 'Assign invigilators'}</span>
           </button>
           <button
