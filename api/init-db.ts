@@ -24,6 +24,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await sql`ALTER TABLE rooms ADD COLUMN IF NOT EXISTS floor TEXT`;
     await sql`ALTER TABLE teachers ADD COLUMN IF NOT EXISTS EE BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE teachers ADD COLUMN IF NOT EXISTS PISO_ZERO BOOLEAN NOT NULL DEFAULT FALSE`;
+    await sql`ALTER TABLE teacher_roles ADD COLUMN IF NOT EXISTS priority INTEGER NOT NULL DEFAULT 0`;
 
     await sql`
       CREATE TABLE IF NOT EXISTS email_settings (
@@ -53,7 +54,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await sql`
       CREATE TABLE IF NOT EXISTS teacher_roles (
           id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-          name TEXT UNIQUE NOT NULL
+          name TEXT UNIQUE NOT NULL,
+          priority INTEGER NOT NULL DEFAULT 0
       );
     `;
 
@@ -68,10 +70,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const roleMap = new Map<string, string>();
 
-    for (const roleName of initialRoles) {
+    for (let i = 0; i < initialRoles.length; i++) {
+      const roleName = initialRoles[i];
       const { rows } = await sql`
-        INSERT INTO teacher_roles (name)
-        VALUES (${roleName})
+        INSERT INTO teacher_roles (name, priority)
+        VALUES (${roleName}, ${i + 1})
         ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
         RETURNING id
       `;

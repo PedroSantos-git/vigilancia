@@ -166,12 +166,6 @@ export default function AdminDashboard({
       );
     }
 
-    if (!hasNoSpecialRole(tchr)) {
-      conflicts.push(
-        `${tchr.name} tem cargo institucional e não deveria estar atribuído como ${label} na ${roomObj.name} (${examObj.name}).`
-      );
-    }
-
     if (isTeacherUnavailableAt(tchr, examObj.date, examObj.time, examObj)) {
       conflicts.push(
         `${tchr.name} tem indisponibilidade registada e foi atribuído como ${label} na ${roomObj.name} (${examObj.name}, ${examObj.date}).`

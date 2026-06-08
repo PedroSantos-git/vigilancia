@@ -1,37 +1,32 @@
 import React, { useState, useEffect } from 'react';
-import { Language } from '../types';
-import { 
-  Tag, 
-  Plus, 
-  Trash2, 
-  Edit2, 
-  Download, 
-  Upload, 
-  AlertCircle, 
-  CheckCircle2, 
+import { Language, TeacherRole } from '../types';
+import {
+  Tag,
+  Plus,
+  Trash2,
+  Edit2,
+  Upload,
+  AlertCircle,
+  CheckCircle2,
   Loader2,
-  X
+  X,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 import { api } from '../utils/api';
-
-interface Role {
-  id: string;
-  name: string;
-}
 
 interface RoleManagerProps {
   lang: Language;
 }
 
 export default function RoleManager({ lang }: RoleManagerProps) {
-  const [roles, setRoles] = useState<Role[]>([]);
+  const [roles, setRoles] = useState<TeacherRole[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // Form states
-  const [editingRole, setEditingRole] = useState<Role | null>(null);
+  const [editingRole, setEditingRole] = useState<TeacherRole | null>(null);
   const [roleName, setRoleName] = useState('');
   const [importText, setImportText] = useState('');
   const [showImport, setShowImport] = useState(false);
@@ -41,7 +36,12 @@ export default function RoleManager({ lang }: RoleManagerProps) {
       setIsLoading(true);
       const data = await api.roles.getAll();
       if (Array.isArray(data)) {
-        setRoles(data);
+        setRoles(
+          data.map((role: TeacherRole) => ({
+            ...role,
+            priority: Number(role.priority ?? 0)
+          }))
+        );
       } else {
         console.error('API returned non-array for roles:', data);
         setRoles([]);
@@ -59,6 +59,8 @@ export default function RoleManager({ lang }: RoleManagerProps) {
     fetchRoles();
   }, []);
 
+  const sortedRoles = [...roles].sort((a, b) => a.priority - b.priority);
+
   const handleSaveRole = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!roleName.trim()) return;
@@ -70,7 +72,8 @@ export default function RoleManager({ lang }: RoleManagerProps) {
     try {
       await api.roles.save({
         id: editingRole?.id,
-        name: roleName.trim()
+        name: roleName.trim(),
+        priority: editingRole?.priority
       });
       setSuccess(lang === 'pt' ? 'Cargo guardado com sucesso!' : 'Role saved successfully!');
       setRoleName('');
@@ -101,7 +104,7 @@ export default function RoleManager({ lang }: RoleManagerProps) {
 
   const handleImport = async () => {
     if (!importText.trim()) return;
-    
+
     setIsSubmitting(true);
     setError('');
     const lines = importText.split('\n').filter(l => l.trim());
@@ -123,6 +126,30 @@ export default function RoleManager({ lang }: RoleManagerProps) {
     }
   };
 
+  const moveRole = async (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= sortedRoles.length) return;
+
+    const reordered = [...sortedRoles];
+    [reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]];
+
+    const updatedRoles = reordered.map((role, idx) => ({
+      ...role,
+      priority: idx + 1
+    }));
+
+    setRoles(updatedRoles);
+
+    try {
+      await api.roles.updateAll(updatedRoles);
+      setSuccess(lang === 'pt' ? 'Ordem dos cargos atualizada.' : 'Role order updated.');
+    } catch (err) {
+      console.error('Error updating role order:', err);
+      setError(lang === 'pt' ? 'Erro ao guardar ordem dos cargos.' : 'Error saving role order.');
+      fetchRoles();
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-sm border border-slate-800 flex justify-between items-center">
@@ -132,15 +159,14 @@ export default function RoleManager({ lang }: RoleManagerProps) {
             {lang === 'pt' ? 'Gestão de Cargos / Funções' : 'Role / Function Management'}
           </h2>
           <p className="text-slate-400 text-xs">
-            {lang === 'pt' 
-              ? 'Defina os cargos que podem ser atribuídos aos professores.' 
-              : 'Define roles that can be assigned to teachers.'}
+            {lang === 'pt'
+              ? 'Defina e ordene os cargos. Na atribuição automática, quando faltarem docentes sem cargo, entram primeiro os cargos no fim desta lista (ordem mais alta).'
+              : 'Define and order roles. During auto-allocation, when teachers without roles run out, roles at the bottom of this list (highest order) are used first.'}
           </p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Form Column */}
         <div className="md:col-span-1">
           {showImport ? (
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm sticky top-6">
@@ -171,14 +197,16 @@ export default function RoleManager({ lang }: RoleManagerProps) {
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm sticky top-6">
               <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
                 {editingRole ? <Edit2 className="h-4 w-4 text-amber-500" /> : <Plus className="h-4 w-4 text-blue-600" />}
-                {editingRole 
-                  ? (lang === 'pt' ? 'Editar Cargo' : 'Edit Role') 
+                {editingRole
+                  ? (lang === 'pt' ? 'Editar Cargo' : 'Edit Role')
                   : (lang === 'pt' ? 'Novo Cargo' : 'New Role')}
               </h3>
-              
+
               <form onSubmit={handleSaveRole} className="space-y-4">
                 <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1.5">{lang === 'pt' ? 'Nome do Cargo' : 'Role Name'}</label>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1.5">
+                    {lang === 'pt' ? 'Nome do Cargo' : 'Role Name'}
+                  </label>
                   <input
                     type="text"
                     required
@@ -227,11 +255,17 @@ export default function RoleManager({ lang }: RoleManagerProps) {
           )}
         </div>
 
-        {/* List Column */}
         <div className="md:col-span-2">
           <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
             <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-              <h3 className="text-sm font-bold text-slate-800">{lang === 'pt' ? 'Lista de Cargos' : 'Roles List'}</h3>
+              <div>
+                <h3 className="text-sm font-bold text-slate-800">{lang === 'pt' ? 'Lista de Cargos' : 'Roles List'}</h3>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  {lang === 'pt'
+                    ? 'Ordem de atribuição: de baixo para cima (últimos entram primeiro em vigilâncias).'
+                    : 'Assignment order: bottom to top (last roles are used first for invigilation).'}
+                </p>
+              </div>
               <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">
                 {roles.length} {lang === 'pt' ? 'Cargos' : 'Roles'}
               </span>
@@ -243,29 +277,50 @@ export default function RoleManager({ lang }: RoleManagerProps) {
                   <Loader2 className="h-8 w-8 animate-spin mb-2" />
                   <span className="text-xs">{lang === 'pt' ? 'A carregar cargos...' : 'Loading roles...'}</span>
                 </div>
-              ) : roles.length === 0 ? (
+              ) : sortedRoles.length === 0 ? (
                 <div className="p-12 text-center text-slate-400">
                   <p className="text-xs">{lang === 'pt' ? 'Nenhum cargo definido.' : 'No roles defined.'}</p>
                 </div>
               ) : (
-                roles.map((role) => (
+                sortedRoles.map((role, index) => (
                   <div key={role.id} className="p-4 flex items-center justify-between hover:bg-slate-50 transition group">
-                    <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">
-                        <Tag className="h-4 w-4" />
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="h-8 w-8 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center shrink-0 text-[10px] font-bold">
+                        {role.priority}
                       </div>
-                      <span className="text-sm font-semibold text-slate-700">{role.name}</span>
+                      <div className="min-w-0">
+                        <span className="text-sm font-semibold text-slate-700 block truncate">{role.name}</span>
+                        <span className="text-[10px] text-slate-400">
+                          {lang === 'pt' ? `Ordem ${role.priority}` : `Order ${role.priority}`}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition">
+                    <div className="flex items-center gap-1 shrink-0">
                       <button
-                        onClick={() => { setEditingRole(role); setRoleName(role.name); }}
-                        className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition"
+                        disabled={index === 0}
+                        onClick={() => moveRole(index, 'up')}
+                        className={`p-2 rounded-lg transition ${index === 0 ? 'text-slate-200' : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'}`}
+                        title={lang === 'pt' ? 'Subir (menos prioritário para vigilâncias)' : 'Move up'}
+                      >
+                        <ChevronUp className="h-4 w-4" />
+                      </button>
+                      <button
+                        disabled={index === sortedRoles.length - 1}
+                        onClick={() => moveRole(index, 'down')}
+                        className={`p-2 rounded-lg transition ${index === sortedRoles.length - 1 ? 'text-slate-200' : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'}`}
+                        title={lang === 'pt' ? 'Descer (mais prioritário para vigilâncias)' : 'Move down'}
+                      >
+                        <ChevronDown className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => { setEditingRole(role); setRoleName(role.name); setShowImport(false); }}
+                        className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition opacity-0 group-hover:opacity-100"
                       >
                         <Edit2 className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => handleDeleteRole(role.id, role.name)}
-                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition opacity-0 group-hover:opacity-100"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>

@@ -11,6 +11,12 @@ export interface TeacherUnavailability {
   subject_group?: string; // Subject group of exam
 }
 
+export interface TeacherRole {
+  id: string;
+  name: string;
+  priority: number;
+}
+
 export interface Teacher {
   id: string;
   name: string;

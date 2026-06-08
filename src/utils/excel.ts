@@ -5,7 +5,7 @@ export const exportToExcel = (
   teachers: Teacher[],
   exams: Exam[],
   rooms: Room[],
-  roles: { id: string, name: string }[]
+  roles: { id: string; name: string; priority?: number }[]
 ) => {
   const wb = XLSX.utils.book_new();
 
@@ -53,9 +53,12 @@ export const exportToExcel = (
   XLSX.utils.book_append_sheet(wb, wsRooms, "Salas");
 
   // 4. Roles Sheet
-  const rolesData = roles.map(r => ({
-    Nome: r.name
-  }));
+  const rolesData = [...roles]
+    .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))
+    .map(r => ({
+      Nome: r.name,
+      Ordem: r.priority ?? 0
+    }));
   const wsRoles = XLSX.utils.json_to_sheet(rolesData);
   XLSX.utils.book_append_sheet(wb, wsRoles, "Cargos");
 
@@ -100,7 +103,10 @@ export const importFromExcel = async (
 
         // 1. Roles
         const rawRoles = sheetsPresent.Cargos ? (getSheetData("Cargos") as any[]) : [];
-        const importedRoles = rawRoles.map(r => ({ name: r.Nome }));
+        const importedRoles = rawRoles.map((r, index) => ({
+          name: String(r.Nome),
+          priority: Number(r.Ordem ?? r.ordem ?? index + 1) || index + 1
+        }));
 
         // 2. Rooms
         const rawRooms = sheetsPresent.Salas ? (getSheetData("Salas") as any[]) : [];

@@ -57,10 +57,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const roleNameToId: Record<string, string> = {};
 
     if (present.Cargos) {
-      for (const r of roles) {
+      for (let i = 0; i < roles.length; i++) {
+        const r = roles[i];
         const { rows } = await sql`
-          INSERT INTO teacher_roles (name)
-          VALUES (${r.name})
+          INSERT INTO teacher_roles (name, priority)
+          VALUES (${r.name}, ${r.priority ?? i + 1})
           RETURNING id
         `;
         roleNameToId[r.name] = rows[0].id;

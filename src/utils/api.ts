@@ -122,10 +122,15 @@ export const api = {
   },
   roles: {
     getAll: () => fetch(`${API_BASE}/roles`).then(r => r.json()),
-    save: (role: { id?: string, name: string }) => fetch(`${API_BASE}/roles`, {
+    save: (role: { id?: string; name: string; priority?: number }) => fetch(`${API_BASE}/roles`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(role)
+    }).then(r => r.json()),
+    updateAll: (roles: Array<{ id: string; name: string; priority: number }>) => fetch(`${API_BASE}/roles`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roles })
     }).then(r => r.json()),
     delete: (id: string) => fetch(`${API_BASE}/roles?id=${id}`, { method: 'DELETE' }).then(r => r.json()),
   },

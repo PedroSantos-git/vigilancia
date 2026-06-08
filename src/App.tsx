@@ -317,7 +317,9 @@ export default function App() {
     const examRooms = examObj.roomIds && examObj.roomIds.length > 0
       ? rooms.filter(r => examObj.roomIds?.includes(r.id))
       : rooms;
-    const result = autoAllocate(examObj, examRooms, teachers, allocations, examCurrentAllocs, exams);
+    const rolesData = await api.roles.getAll();
+    const roles = Array.isArray(rolesData) ? rolesData : [];
+    const result = autoAllocate(examObj, examRooms, teachers, allocations, examCurrentAllocs, exams, roles);
 
     await Promise.all(result.allocations.map(alloc => api.allocations.save(alloc)));
 
@@ -384,11 +386,13 @@ export default function App() {
     }
 
     try {
-      pushOperationLog(lang === 'pt' ? 'A gerar plano global (EE -> Restrições -> Atribuição genérica)...' : 'Building global plan (EE -> Restrictions -> Generic assignment)...');
+      pushOperationLog(lang === 'pt' ? 'A gerar plano global (EE -> Restrições -> Genérica -> Cargos)...' : 'Building global plan (EE -> Restrictions -> Generic -> Roles)...');
       setOperationProgress(20);
       await waitForUiTick();
 
-      const planningResult = autoAllocateAll(exams, rooms, teachers);
+      const rolesData = await api.roles.getAll();
+      const roles = Array.isArray(rolesData) ? rolesData : [];
+      const planningResult = autoAllocateAll(exams, rooms, teachers, roles);
       pushOperationLog(
         lang === 'pt'
           ? `Plano gerado: ${planningResult.allocations.length} alocações.`

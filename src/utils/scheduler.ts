@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Teacher, Room, Exam, Allocation } from "../types";
+import { Teacher, Room, Exam, Allocation, TeacherRole } from "../types";
 
 export interface AllocationResult {
   allocations: Allocation[];
@@ -89,6 +89,44 @@ function normalizeText(value: string | null | undefined): string {
 
 export function hasNoSpecialRole(teacher: Teacher): boolean {
   return normalizeText(teacher.role) === "";
+}
+
+export function hasSpecialRole(teacher: Teacher): boolean {
+  return !hasNoSpecialRole(teacher);
+}
+
+function buildRolePriorityMap(roles: TeacherRole[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const role of roles) {
+    map.set(role.id, role.priority ?? 0);
+  }
+  return map;
+}
+
+function getTeacherRolePriority(teacher: Teacher, rolePriorityById: Map<string, number>): number {
+  const roleId = String(teacher.role || "").trim();
+  if (!roleId) return -1;
+  return rolePriorityById.get(roleId) ?? 0;
+}
+
+function pickCargoTeacher(
+  candidates: Teacher[],
+  rolePriorityById: Map<string, number>,
+  assignmentCounts: Map<string, number>
+): Teacher | null {
+  if (candidates.length === 0) return null;
+
+  const priorities = [...new Set(candidates.map(t => getTeacherRolePriority(t, rolePriorityById)))].sort(
+    (a, b) => b - a
+  );
+
+  for (const priority of priorities) {
+    const tier = candidates.filter(t => getTeacherRolePriority(t, rolePriorityById) === priority);
+    const selected = pickLeastUsedRandom(tier, assignmentCounts);
+    if (selected) return selected;
+  }
+
+  return null;
 }
 
 export function isFloorZero(room: Room): boolean {
@@ -359,6 +397,78 @@ function assignRestrictedTeachers(
   }
 }
 
+function assignCargoTeachers(
+  pairs: Array<{ exam: Exam; room: Room }>,
+  cargoPool: Teacher[],
+  rolePriorityById: Map<string, number>,
+  targetAllocationByKey: Map<string, Allocation>,
+  dayBusy: Set<string>,
+  assignmentCounts: Map<string, number>,
+  maxAssignmentsPerTeacher: number,
+  warnings: string[],
+  notifications: Array<{ teacherId: string; message: string }>
+): void {
+  for (const role of ALLOCATION_ROLES) {
+    let usedInRound = new Set<string>();
+
+    for (const pair of pairs) {
+      const key = allocationKey(pair.exam.id, pair.room.id);
+      const alloc = targetAllocationByKey.get(key);
+      if (!alloc || alloc[role]) continue;
+
+      let candidates = cargoPool.filter(teacher =>
+        canAssignTeacherToSlot(
+          teacher,
+          pair.exam,
+          pair.room,
+          alloc,
+          dayBusy,
+          assignmentCounts,
+          maxAssignmentsPerTeacher
+        )
+      );
+
+      candidates = prioritizePisoZero(candidates, pair.room);
+
+      let pool = candidates.filter(teacher => !usedInRound.has(teacher.id));
+      if (pool.length === 0) {
+        usedInRound = new Set<string>();
+        pool = candidates;
+      }
+
+      const selected = pickCargoTeacher(pool, rolePriorityById, assignmentCounts);
+      if (!selected) continue;
+
+      assignTeacherToSlot(
+        selected,
+        alloc,
+        role,
+        pair.exam,
+        pair.room,
+        dayBusy,
+        assignmentCounts,
+        notifications,
+        " (cargo)"
+      );
+      usedInRound.add(selected.id);
+    }
+  }
+
+  for (const pair of pairs) {
+    const key = allocationKey(pair.exam.id, pair.room.id);
+    const alloc = targetAllocationByKey.get(key);
+    if (!alloc) continue;
+
+    for (const role of ALLOCATION_ROLES) {
+      if (!alloc[role]) {
+        warnings.push(
+          `Sem docente elegível para ${ROLE_LABEL_PT[role]} em ${pair.room.name} (${pair.exam.name}, ${pair.exam.date}), mesmo após recurso a docentes com cargo.`
+        );
+      }
+    }
+  }
+}
+
 function assignGenericTeachers(
   pairs: Array<{ exam: Exam; room: Room }>,
   genericPool: Teacher[],
@@ -398,10 +508,7 @@ function assignGenericTeachers(
       }
 
       const selected = pickLeastUsedRandom(pool, assignmentCounts);
-      if (!selected) {
-        warnings.push(`Sem docente elegível para ${ROLE_LABEL_PT[role]} em ${pair.room.name} (${pair.exam.name}, ${pair.exam.date}).`);
-        continue;
-      }
+      if (!selected) continue;
 
       assignTeacherToSlot(
         selected,
@@ -481,7 +588,8 @@ export function autoAllocateRooms(
 export function autoAllocateAll(
   exams: Exam[],
   rooms: Room[],
-  teachers: Teacher[]
+  teachers: Teacher[],
+  roles: TeacherRole[] = []
 ): AllocationResult {
   const pairs = getSortedPairs(exams, rooms);
   const targetAllocationByKey = new Map<string, Allocation>();
@@ -490,8 +598,10 @@ export function autoAllocateAll(
   const dayBusy = new Set<string>();
   const assignmentCounts = new Map<string, number>();
 
+  const rolePriorityById = buildRolePriorityMap(roles);
   const basePool = teachers.filter(teacher => teacher.available && hasNoSpecialRole(teacher));
-  basePool.forEach(teacher => assignmentCounts.set(teacher.id, 0));
+  const cargoPool = teachers.filter(teacher => teacher.available && hasSpecialRole(teacher));
+  teachers.filter(t => t.available).forEach(teacher => assignmentCounts.set(teacher.id, 0));
 
   for (const pair of pairs) {
     const key = allocationKey(pair.exam.id, pair.room.id);
@@ -559,6 +669,33 @@ export function autoAllocateAll(
     notifications
   );
 
+  // Fase 4: docentes com cargo (available), por ordem de prioridade do cargo (maior primeiro)
+  if (cargoPool.length > 0) {
+    assignCargoTeachers(
+      pairs,
+      cargoPool,
+      rolePriorityById,
+      targetAllocationByKey,
+      dayBusy,
+      assignmentCounts,
+      maxAssignmentsPerTeacher,
+      warnings,
+      notifications
+    );
+  } else {
+    for (const pair of pairs) {
+      const alloc = targetAllocationByKey.get(allocationKey(pair.exam.id, pair.room.id));
+      if (!alloc) continue;
+      for (const role of ALLOCATION_ROLES) {
+        if (!alloc[role]) {
+          warnings.push(
+            `Sem docente elegível para ${ROLE_LABEL_PT[role]} em ${pair.room.name} (${pair.exam.name}, ${pair.exam.date}).`
+          );
+        }
+      }
+    }
+  }
+
   return {
     allocations: pairs
       .map(pair => targetAllocationByKey.get(allocationKey(pair.exam.id, pair.room.id)))
@@ -577,7 +714,8 @@ export function autoAllocate(
   teachers: Teacher[],
   allAllocations: Allocation[],
   currentExamAllocations: Allocation[],
-  allExams: Exam[]
+  allExams: Exam[],
+  roles: TeacherRole[] = []
 ): AllocationResult {
   const pairs = getSortedPairs([exam], rooms);
   const targetAllocationByKey = new Map<string, Allocation>();
@@ -608,8 +746,10 @@ export function autoAllocate(
     }
   });
 
+  const rolePriorityById = buildRolePriorityMap(roles);
   const basePool = teachers.filter(teacher => teacher.available && hasNoSpecialRole(teacher));
-  basePool.forEach(teacher => {
+  const cargoPool = teachers.filter(teacher => teacher.available && hasSpecialRole(teacher));
+  teachers.filter(t => t.available).forEach(teacher => {
     if (!assignmentCounts.has(teacher.id)) {
       assignmentCounts.set(teacher.id, 0);
     }
@@ -673,6 +813,32 @@ export function autoAllocate(
     warnings,
     notifications
   );
+
+  if (cargoPool.length > 0) {
+    assignCargoTeachers(
+      pairs,
+      cargoPool,
+      rolePriorityById,
+      targetAllocationByKey,
+      dayBusy,
+      assignmentCounts,
+      maxAssignmentsPerTeacher,
+      warnings,
+      notifications
+    );
+  } else {
+    for (const pair of pairs) {
+      const alloc = targetAllocationByKey.get(allocationKey(pair.exam.id, pair.room.id));
+      if (!alloc) continue;
+      for (const role of ALLOCATION_ROLES) {
+        if (!alloc[role]) {
+          warnings.push(
+            `Sem docente elegível para ${ROLE_LABEL_PT[role]} em ${pair.room.name} (${pair.exam.name}, ${pair.exam.date}).`
+          );
+        }
+      }
+    }
+  }
 
   return {
     allocations: pairs
