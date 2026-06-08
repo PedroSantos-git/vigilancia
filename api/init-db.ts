@@ -17,11 +17,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // 1b. Migration/Repair (Always run to ensure columns exist)
-    await sql`ALTER TABLE exams ADD COLUMN IF NOT EXISTS duration INTEGER NOT NULL DEFAULT 120`;
-    await sql`ALTER TABLE exams ADD COLUMN IF NOT EXISTS tolerance INTEGER NOT NULL DEFAULT 30`;
-    await sql`ALTER TABLE exams ADD COLUMN IF NOT EXISTS rooms_needed INTEGER NOT NULL DEFAULT 1`;
+    await sql`ALTER TABLE exams ADD COLUMN IF NOT EXISTS registrations_count INTEGER NOT NULL DEFAULT 0`;
     await sql`ALTER TABLE exams ADD COLUMN IF NOT EXISTS room_ids JSONB DEFAULT '[]'::jsonb`;
+    await sql`ALTER TABLE exams ADD COLUMN IF NOT EXISTS EE BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE rooms ADD COLUMN IF NOT EXISTS priority INTEGER DEFAULT 0`;
+    await sql`ALTER TABLE rooms ADD COLUMN IF NOT EXISTS floor TEXT`;
+    await sql`ALTER TABLE teachers ADD COLUMN IF NOT EXISTS EE BOOLEAN NOT NULL DEFAULT FALSE`;
+    await sql`ALTER TABLE teachers ADD COLUMN IF NOT EXISTS PISO_ZERO BOOLEAN NOT NULL DEFAULT FALSE`;
 
     await sql`
       CREATE TABLE IF NOT EXISTS email_settings (
@@ -96,32 +98,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           subject TEXT NOT NULL,
           role TEXT,
           email TEXT UNIQUE,
-          phone TEXT,
           available BOOLEAN DEFAULT TRUE,
+          EE BOOLEAN DEFAULT FALSE,
+          PISO_ZERO BOOLEAN DEFAULT FALSE,
           unavailabilities JSONB DEFAULT '[]'::jsonb
       );
     `;
 
     await sql`
       CREATE TABLE IF NOT EXISTS rooms (
-          id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-          name TEXT UNIQUE NOT NULL,
-          capacity INTEGER NOT NULL DEFAULT 15,
-          floor TEXT,
-          priority INTEGER DEFAULT 0
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        name TEXT UNIQUE NOT NULL,
+        capacity INTEGER NOT NULL DEFAULT 15,
+        floor TEXT,
+        priority INTEGER DEFAULT 0
       );
     `;
 
     const defaultRooms = [
-      'B11', 'B12', 'B13', 'B14', 'B15', 'B16', 'B17',
-      'B21', 'B22', 'B23', 'B24', 'B25', 'B26', 'B27'
+      { name: 'B11', floor: '1' },
+      { name: 'B12', floor: '1' },
+      { name: 'B13', floor: '1' },
+      { name: 'B14', floor: '1' },
+      { name: 'B15', floor: '1' },
+      { name: 'B16', floor: '1' },
+      { name: 'B17', floor: '1' },
+      { name: 'B21', floor: '2' },
+      { name: 'B22', floor: '2' },
+      { name: 'B23', floor: '2' },
+      { name: 'B24', floor: '2' },
+      { name: 'B25', floor: '2' },
+      { name: 'B26', floor: '2' },
+      { name: 'B27', floor: '2' }
     ];
 
     for (let i = 0; i < defaultRooms.length; i++) {
-      const roomName = defaultRooms[i];
+      const room = defaultRooms[i];
       await sql`
         INSERT INTO rooms (name, capacity, floor, priority)
-        VALUES (${roomName}, 15, ${roomName.startsWith('B1') ? '1' : '2'}, ${i + 1})
+        VALUES (${room.name}, 15, ${room.floor}, ${i + 1})
         ON CONFLICT (name) DO UPDATE SET capacity = EXCLUDED.capacity, floor = EXCLUDED.floor, priority = EXCLUDED.priority
       `;
     }
@@ -139,9 +154,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           shift TEXT,
           modality TEXT,
           phase TEXT NOT NULL,
-          duration INTEGER NOT NULL DEFAULT 120,
-          tolerance INTEGER NOT NULL DEFAULT 30,
-          rooms_needed INTEGER NOT NULL DEFAULT 1,
+          registrations_count INTEGER NOT NULL DEFAULT 0,
+          EE BOOLEAN NOT NULL DEFAULT FALSE,
           room_ids JSONB DEFAULT '[]'::jsonb
       );
     `;
@@ -246,14 +260,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ];
 
     for (const ex of initialExams) {
-      let duration = 120;
-      let tolerance = 30;
-      if (ex.year === '9') duration = 90;
-      if (ex.name.toLowerCase().includes('matemática')) duration = 150;
+      const isEE = ex.modality === 'EE';
 
       await sql`
-        INSERT INTO exams (name, variant, subject_group, year, code, date, time, shift, modality, phase, duration, tolerance, rooms_needed)
-        VALUES (${ex.name}, ${ex.variant}, ${ex.subject_group}, ${ex.year}, ${ex.code}, ${ex.date}, ${ex.time}, ${ex.shift}, ${ex.modality}, ${ex.phase}, ${duration}, ${tolerance}, 1)
+        INSERT INTO exams (name, variant, subject_group, year, code, date, time, shift, modality, phase, registrations_count, EE)
+        VALUES (${ex.name}, ${ex.variant}, ${ex.subject_group}, ${ex.year}, ${ex.code}, ${ex.date}, ${ex.time}, ${ex.shift}, ${ex.modality}, ${ex.phase}, 0, ${isEE})
       `;
     }
 
@@ -386,9 +397,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     for (const t of initialTeachers) {
       const roleId = t.r ? roleMap.get(t.r) : null;
+      const isEE = t.g === "910";
       await sql`
-        INSERT INTO teachers (name, subject_group, subject, role, available)
-        VALUES (${t.n}, ${t.g}, ${t.s}, ${roleId}, true)
+        INSERT INTO teachers (name, subject_group, subject, role, available, EE, PISO_ZERO, unavailabilities)
+        VALUES (${t.n}, ${t.g}, ${t.s}, ${roleId}, true, ${isEE}, false, '[]'::jsonb)
       `;
     }
 

@@ -16,7 +16,9 @@ export const exportToExcel = (
     Disciplina: t.subject,
     Cargo: roles.find(r => r.id === t.role)?.name || t.role || '',
     Email: t.email || '',
-    Disponivel: t.available ? 'SIM' : 'NÃO'
+    Disponivel: t.available ? 'SIM' : 'NÃO',
+    EE: t.EE ? 'SIM' : 'NÃO',
+    PISO_ZERO: t.PISO_ZERO ? 'SIM' : 'NÃO'
   }));
   const wsTeachers = XLSX.utils.json_to_sheet(teachersData);
   XLSX.utils.book_append_sheet(wb, wsTeachers, "Docentes");
@@ -33,7 +35,8 @@ export const exportToExcel = (
     Turno: e.shift || '',
     Modalidade: e.modality || '',
     Fase: e.phase,
-    Salas: (e.roomIds || []).map(rid => rooms.find(r => r.id === rid)?.name || rid).join('; ')
+    N_Inscritos: e.registrationsCount || 0,
+    EE: e.EE ? 'SIM' : 'NÃO'
   }));
   const wsExams = XLSX.utils.json_to_sheet(examsData);
   XLSX.utils.book_append_sheet(wb, wsExams, "Exames");
@@ -42,7 +45,8 @@ export const exportToExcel = (
   const roomsData = rooms.map(r => ({
     Nome: r.name,
     Capacidade: r.capacity,
-    Piso: r.floor || ''
+    Floor: r.floor || '',
+    priority: r.priority
   }));
   const wsRooms = XLSX.utils.json_to_sheet(roomsData);
   XLSX.utils.book_append_sheet(wb, wsRooms, "Salas");
@@ -87,10 +91,11 @@ export const importFromExcel = async (
         // 2. Rooms
         const rawRooms = getSheetData("Salas") as any[];
         const importedRooms = rawRooms.map(r => ({
-          name: String(r.Nome),
-          capacity: Number(r.Capacidade) || 15,
-          floor: String(r.Piso || '')
-        }));
+        name: String(r.Nome),
+        capacity: Number(r.Capacidade) || 15,
+        floor: r.Floor ? String(r.Floor) : undefined,
+        priority: Number(r.priority) || 0
+      }));
 
         // 3. Teachers
         const rawTeachers = getSheetData("Docentes") as any[];
@@ -100,7 +105,9 @@ export const importFromExcel = async (
           subject: String(t.Disciplina || 'Geral'),
           role: String(t.Cargo || ''), // Will be mapped to ID in the API/Handler
           email: t.Email ? String(t.Email) : null,
-          available: String(t.Disponivel).toUpperCase() === 'SIM'
+          available: String(t.Disponivel).toUpperCase() === 'SIM',
+          EE: String(t.EE || 'NÃO').toUpperCase() === 'SIM',
+          PISO_ZERO: String(t.PISO_ZERO || 'NÃO').toUpperCase() === 'SIM'
         }));
 
         // 4. Exams
@@ -116,7 +123,8 @@ export const importFromExcel = async (
           shift: e.Turno ? String(e.Turno) : null,
           modality: e.Modalidade ? String(e.Modalidade) : null,
           phase: String(e.Fase || '1'),
-          roomNames: String(e.Salas || '').split(';').map(s => s.trim()).filter(s => s !== '')
+          registrationsCount: Number(e.N_Inscritos || 0),
+          EE: String(e.EE || 'NÃO').toUpperCase() === 'SIM'
         }));
 
         resolve({

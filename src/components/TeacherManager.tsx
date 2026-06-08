@@ -6,7 +6,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Teacher, Language } from '../types';
+import { Teacher, Language, Exam } from '../types';
 import { translations } from '../translations';
 import { api } from '../utils/api';
 import { 
@@ -24,6 +24,7 @@ import {
 interface TeacherManagerProps {
   lang: Language;
   teachers: Teacher[];
+  exams: Exam[];
   onAddTeacher: (teacher: Teacher) => void;
   onUpdateTeacher: (teacher: Teacher) => void;
   onDeleteTeacher: (id: string) => void;
@@ -33,6 +34,7 @@ interface TeacherManagerProps {
 export default function TeacherManager({
   lang,
   teachers,
+  exams,
   onAddTeacher,
   onUpdateTeacher,
   onDeleteTeacher,
@@ -49,6 +51,8 @@ export default function TeacherManager({
   const [unavailabilityTeacher, setUnavailabilityTeacher] = useState<Teacher | null>(null);
   const [unavailDate, setUnavailDate] = useState('');
   const [unavailTime, setUnavailTime] = useState<'all' | '09:00' | '14:00'>('all');
+  const [unavailYear, setUnavailYear] = useState('');
+  const [unavailSubjectGroup, setUnavailSubjectGroup] = useState('');
 
   // Form state
   const [name, setName] = useState('');
@@ -56,8 +60,9 @@ export default function TeacherManager({
   const [subject, setSubject] = useState('');
   const [role, setRole] = useState('professor');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
   const [available, setAvailable] = useState(true);
+  const [EE, setEE] = useState(false);
+  const [PISO_ZERO, setPISO_ZERO] = useState(false);
 
   // Roles state for dropdown
   const [availableRoles, setAvailableRoles] = useState<{id: string, name: string}[]>([]);
@@ -86,8 +91,9 @@ export default function TeacherManager({
     setSubject('');
     setRole('Professor');
     setEmail('');
-    setPhone('');
     setAvailable(true);
+    setEE(false);
+    setPISO_ZERO(false);
     setIsModalOpen(true);
   };
 
@@ -99,8 +105,9 @@ export default function TeacherManager({
     setSubject(teacher.subject || '');
     setRole(teacher.role || '');
     setEmail(teacher.email || '');
-    setPhone('');
     setAvailable(teacher.available);
+    setEE(teacher.EE || false);
+    setPISO_ZERO(teacher.PISO_ZERO || false);
     setIsModalOpen(true);
   };
 
@@ -121,6 +128,8 @@ export default function TeacherManager({
       role: role || null,
       email: email || null,
       available,
+      EE,
+      PISO_ZERO,
       unavailabilities: editingTeacher?.unavailabilities || []
     };
 
@@ -253,6 +262,8 @@ export default function TeacherManager({
                 <th className="px-5 py-3">{t.role}</th>
                 <th className="px-5 py-3">{t.email}</th>
                 <th className="px-5 py-3 text-center">{t.available}</th>
+                <th className="px-5 py-3 text-center">EE</th>
+                <th className="px-5 py-3 text-center">Piso 0</th>
                 <th className="px-5 py-3 text-right">{t.actions}</th>
               </tr>
             </thead>
@@ -280,6 +291,24 @@ export default function TeacherManager({
                       >
                         {tc.available ? (lang === 'pt' ? 'SIM' : 'YES') : (lang === 'pt' ? 'NÃO' : 'NO')}
                       </button>
+                    </td>
+                    <td className="px-5 py-3 text-center">
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        tc.EE 
+                          ? 'bg-green-50 text-green-700 border border-green-200' 
+                          : 'bg-slate-50 text-slate-500 border border-slate-200'
+                      }`}>
+                        {tc.EE ? (lang === 'pt' ? 'SIM' : 'YES') : (lang === 'pt' ? 'NÃO' : 'NO')}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-center">
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        tc.PISO_ZERO 
+                          ? 'bg-purple-50 text-purple-700 border border-purple-200' 
+                          : 'bg-slate-50 text-slate-500 border border-slate-200'
+                      }`}>
+                        {tc.PISO_ZERO ? (lang === 'pt' ? 'SIM' : 'YES') : (lang === 'pt' ? 'NÃO' : 'NO')}
+                      </span>
                     </td>
                     <td className="px-5 py-3 text-right">
                       <div className="flex justify-end space-x-2">
@@ -312,7 +341,7 @@ export default function TeacherManager({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="text-center py-10 text-slate-400">
+                  <td colSpan={9} className="text-center py-10 text-slate-400">
                     Nenhum docente encontrado de momento.
                   </td>
                 </tr>
@@ -422,6 +451,32 @@ export default function TeacherManager({
                 </label>
               </div>
 
+              <div className="flex items-center space-x-3">
+                <input
+                  type="checkbox"
+                  id="v-ee"
+                  checked={EE}
+                  onChange={(e) => setEE(e.target.checked)}
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                <label id="ee_label" htmlFor="v-ee" className="text-xs text-slate-700 font-medium">
+                  Educação Especial (EE)
+                </label>
+              </div>
+
+              <div className="flex items-center space-x-3">
+                <input
+                  type="checkbox"
+                  id="v-piso-zero"
+                  checked={PISO_ZERO}
+                  onChange={(e) => setPISO_ZERO(e.target.checked)}
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                <label id="piso_zero_label" htmlFor="v-piso-zero" className="text-xs text-slate-700 font-medium">
+                  Apenas Piso 0
+                </label>
+              </div>
+
               <div className="flex justify-end space-x-2 pt-4 border-t border-slate-100">
                 <button
                   type="button"
@@ -467,48 +522,127 @@ export default function TeacherManager({
             <div className="p-6 space-y-5">
               {/* Form to add a new blockout slot */}
               <div className="bg-blue-50/50 rounded-xl p-4 border border-blue-100/60 space-y-3">
-                <h4 className="text-xs font-bold text-blue-900 uppercase tracking-wider font-sans">
-                  {t.addUnavailability}
-                </h4>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-semibold text-slate-550 uppercase tracking-wider mb-1">
-                      {t.date}
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      value={unavailDate}
-                      onChange={(e) => setUnavailDate(e.target.value)}
-                      className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 bg-white focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-slate-550 uppercase tracking-wider mb-1">
-                      {lang === 'pt' ? 'Período' : 'Time Slot'}
-                    </label>
-                    <select
-                      value={unavailTime}
-                      onChange={(e) => setUnavailTime(e.target.value as any)}
-                      className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 bg-white focus:outline-none focus:border-blue-500 cursor-pointer"
-                    >
-                      <option value="all">{t.allDay}</option>
-                      <option value="09:00">{t.morning}</option>
-                      <option value="14:00">{t.afternoon}</option>
-                    </select>
-                  </div>
+          <h4 className="text-xs font-bold text-blue-900 uppercase tracking-wider font-sans">
+            {t.addUnavailability}
+          </h4>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-semibold text-slate-550 uppercase tracking-wider mb-1">
+                {t.date}
+              </label>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    id="unavail-date-specific"
+                    name="unavail-date-type"
+                    checked={unavailDate !== 'all' && unavailDate !== ''}
+                    onChange={() => setUnavailDate('')}
+                    className="text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="unavail-date-specific" className="text-xs text-slate-700">
+                    {lang === 'pt' ? 'Data específica' : 'Specific Date'}
+                  </label>
                 </div>
+                {unavailDate !== 'all' && (
+                  <input
+                    type="date"
+                    required
+                    value={unavailDate}
+                    onChange={(e) => setUnavailDate(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 bg-white focus:outline-none focus:border-blue-500"
+                  />
+                )}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    id="unavail-date-all"
+                    name="unavail-date-type"
+                    checked={unavailDate === 'all'}
+                    onChange={() => setUnavailDate('all')}
+                    className="text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="unavail-date-all" className="text-xs text-slate-700">
+                    {lang === 'pt' ? 'Todas as datas' : 'All Dates'}
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-slate-550 uppercase tracking-wider mb-1">
+                {lang === 'pt' ? 'Período' : 'Time Slot'}
+              </label>
+              <select
+                value={unavailTime}
+                onChange={(e) => setUnavailTime(e.target.value as any)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 bg-white focus:outline-none focus:border-blue-500 cursor-pointer"
+              >
+                <option value="all">{t.allDay}</option>
+                <option value="09:00">{lang === 'pt' ? 'Manhã' : 'Morning'}</option>
+                <option value="14:00">{lang === 'pt' ? 'Tarde' : 'Afternoon'}</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-semibold text-slate-550 uppercase tracking-wider mb-1">
+                {lang === 'pt' ? 'Ano' : 'Year'}
+              </label>
+              <select
+                value={unavailYear}
+                onChange={(e) => setUnavailYear(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 bg-white focus:outline-none focus:border-blue-500 cursor-pointer"
+              >
+                <option value="">{lang === 'pt' ? 'Todos os anos' : 'All Years'}</option>
+                <option value="9">9º Ano</option>
+                <option value="11">11º Ano</option>
+                <option value="12">12º Ano</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-slate-550 uppercase tracking-wider mb-1">
+                {lang === 'pt' ? 'Grupo Disciplinar' : 'Subject Group'}
+              </label>
+              <select
+                value={unavailSubjectGroup}
+                onChange={(e) => setUnavailSubjectGroup(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 bg-white focus:outline-none focus:border-blue-500 cursor-pointer"
+              >
+                <option value="">{lang === 'pt' ? 'Todos os grupos' : 'All Groups'}</option>
+                {(() => {
+                  // Get unique subject_group + name pairs from exams, sorted by subject_group number
+                  const uniqueGroups = new Map();
+                  exams.forEach(ex => {
+                    if (!uniqueGroups.has(ex.subject_group)) {
+                      uniqueGroups.set(ex.subject_group, ex.name);
+                    }
+                  });
+                  return Array.from(uniqueGroups.entries())
+                    .sort(([a], [b]) => parseInt(a, 10) - parseInt(b, 10))
+                    .map(([group, name]) => (
+                      <option key={group} value={group}>{group} - {name}</option>
+                    ));
+                })()}
+              </select>
+            </div>
+          </div>
 
                 <div className="flex justify-end pt-1">
                   <button
                     type="button"
-                    disabled={!unavailDate}
+                    disabled={!unavailDate || (unavailDate !== 'all' && !unavailDate.match(/^\d{4}-\d{2}-\d{2}$/))}
                     onClick={() => {
-                      if (!unavailDate) return;
+                      if (!unavailDate || (unavailDate !== 'all' && !unavailDate.match(/^\d{4}-\d{2}-\d{2}$/))) return;
                       const currentUnavailabilities = unavailabilityTeacher.unavailabilities || [];
-                      // Prevent duplicate date + times
-                      const isDup = currentUnavailabilities.some(u => u.date === unavailDate && u.time === unavailTime);
+                      // Prevent duplicate date + times + year + subject_group
+                      const isDup = currentUnavailabilities.some(u => 
+                        u.date === unavailDate && 
+                        u.time === unavailTime &&
+                        u.year === unavailYear &&
+                        u.subject_group === unavailSubjectGroup
+                      );
                       if (isDup) {
                         alert(lang === 'pt' ? 'Esta indisponibilidade já se encontra registada.' : 'This unavailability is already listed.');
                         return;
@@ -516,7 +650,9 @@ export default function TeacherManager({
                       const newUn = {
                         id: `un_${Date.now()}`,
                         date: unavailDate,
-                        time: unavailTime
+                        time: unavailTime,
+                        year: unavailYear || undefined,
+                        subject_group: unavailSubjectGroup || undefined
                       };
                       const updated = {
                         ...unavailabilityTeacher,
@@ -525,6 +661,8 @@ export default function TeacherManager({
                       onUpdateTeacher(updated);
                       setUnavailabilityTeacher(updated);
                       setUnavailDate('');
+                      setUnavailYear('');
+                      setUnavailSubjectGroup('');
                     }}
                     className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold cursor-pointer transition shadow-sm"
                   >
@@ -548,14 +686,24 @@ export default function TeacherManager({
                         .sort((a, b) => a.date.localeCompare(b.date))
                         .map((un) => (
                           <div key={un.id} className="px-4 py-2.5 flex items-center justify-between hover:bg-slate-50/55 transition">
-                            <div className="flex items-center space-x-3">
+                            <div className="flex items-center space-x-2 flex-wrap">
                               <Calendar className="h-3.5 w-3.5 text-slate-400" />
                               <div className="font-mono text-xs font-semibold text-slate-800">
-                                {un.date}
+                                {un.date === 'all' ? (lang === 'pt' ? 'Todas as datas' : 'All Dates') : un.date}
                               </div>
                               <span className="text-[10px] font-semibold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-sans">
-                                {un.time === 'all' ? t.allDay : (un.time === '09:00' ? t.morning : t.afternoon)}
+                                {un.time === 'all' ? t.allDay : (un.time === '09:00' ? (lang === 'pt' ? 'Manhã' : 'Morning') : (lang === 'pt' ? 'Tarde' : 'Afternoon'))}
                               </span>
+                              {un.year && (
+                                <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-sans">
+                                  {un.year}º Ano
+                                </span>
+                              )}
+                              {un.subject_group && (
+                                <span className="text-[10px] font-semibold bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-sans">
+                                  {un.subject_group}
+                                </span>
+                              )}
                             </div>
                             <button
                               type="button"
@@ -574,7 +722,7 @@ export default function TeacherManager({
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           </div>
-                      ))}
+                        ))}
                     </div>
                   ) : (
                     <p className="text-center py-8 text-xs text-slate-400 italic">

@@ -832,6 +832,7 @@ export default function App() {
                 <TeacherManager 
                   lang={lang} 
                   teachers={teachers} 
+                  exams={exams}
                   onAddTeacher={handleAddTeacher}
                   onUpdateTeacher={handleUpdateTeacher}
                   onDeleteTeacher={handleDeleteTeacher}

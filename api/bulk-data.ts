@@ -47,8 +47,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     for (const t of teachers) {
       const roleId = t.role ? roleNameToId[t.role] : null;
       await sql`
-        INSERT INTO teachers (name, subject_group, subject, role, email, available)
-        VALUES (${t.name}, ${t.subject_group}, ${t.subject}, ${roleId}, ${t.email || null}, ${t.available})
+        INSERT INTO teachers (name, subject_group, subject, role, email, available, EE, PISO_ZERO)
+        VALUES (${t.name}, ${t.subject_group}, ${t.subject}, ${roleId}, ${t.email || null}, ${t.available}, ${t.EE ?? false}, ${t.PISO_ZERO ?? false})
       `;
     }
 
@@ -59,7 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .filter((id: string) => !!id);
 
       await sql`
-        INSERT INTO exams (name, variant, subject_group, year, code, date, time, shift, modality, phase, room_ids)
+        INSERT INTO exams (name, variant, subject_group, year, code, date, time, shift, modality, phase, registrations_count, EE, room_ids)
         VALUES (
           ${e.name}, 
           ${e.variant || null}, 
@@ -71,6 +71,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ${e.shift || null}, 
           ${e.modality || null}, 
           ${e.phase},
+          ${e.registrationsCount || 0},
+          ${e.EE ?? false},
           ${JSON.stringify(examRoomIds)}
         )
       `;

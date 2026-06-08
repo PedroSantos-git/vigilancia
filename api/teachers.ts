@@ -30,8 +30,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           subject,
           role,
           email,
-          phone,
           available,
+          EE,
+          PISO_ZERO,
           unavailabilities
         } = req.body;
 
@@ -45,26 +46,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const normalizedSubject = subject.trim();
         const normalizedRole = role?.trim() || null;
         const normalizedEmail = email?.trim() || null;
-        const normalizedPhone = phone?.trim() || null;
         
         if (id) {
           await sql`
-            INSERT INTO teachers (id, name, subject_group, subject, role, email, phone, available, unavailabilities)
-            VALUES (${id}, ${normalizedName}, ${subjectGroup}, ${normalizedSubject}, ${normalizedRole}, ${normalizedEmail}, ${normalizedPhone}, ${available ?? true}, ${JSON.stringify(unavailabilities ?? [])})
+            INSERT INTO teachers (id, name, subject_group, subject, role, email, available, EE, PISO_ZERO, unavailabilities)
+            VALUES (${id}, ${normalizedName}, ${subjectGroup}, ${normalizedSubject}, ${normalizedRole}, ${normalizedEmail}, ${available ?? true}, ${EE ?? false}, ${PISO_ZERO ?? false}, ${JSON.stringify(unavailabilities ?? [])})
             ON CONFLICT (id) DO UPDATE SET
               name = EXCLUDED.name,
               subject_group = EXCLUDED.subject_group,
               subject = EXCLUDED.subject,
               role = EXCLUDED.role,
               email = EXCLUDED.email,
-              phone = EXCLUDED.phone,
               available = EXCLUDED.available,
+              EE = EXCLUDED.EE,
+              PISO_ZERO = EXCLUDED.PISO_ZERO,
               unavailabilities = EXCLUDED.unavailabilities
           `;
         } else {
           await sql`
-            INSERT INTO teachers (name, subject_group, subject, role, email, phone, available, unavailabilities)
-            VALUES (${normalizedName}, ${subjectGroup}, ${normalizedSubject}, ${normalizedRole}, ${normalizedEmail}, ${normalizedPhone}, ${available ?? true}, ${JSON.stringify(unavailabilities ?? [])})
+            INSERT INTO teachers (name, subject_group, subject, role, email, available, EE, PISO_ZERO, unavailabilities)
+            VALUES (${normalizedName}, ${subjectGroup}, ${normalizedSubject}, ${normalizedRole}, ${normalizedEmail}, ${available ?? true}, ${EE ?? false}, ${PISO_ZERO ?? false}, ${JSON.stringify(unavailabilities ?? [])})
           `;
         }
         return res.status(201).json({ message: 'Teacher saved' });

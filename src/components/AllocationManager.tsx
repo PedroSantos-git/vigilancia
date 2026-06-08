@@ -232,6 +232,9 @@ export default function AllocationManager({
                   {group.exams.map(ex => {
                     const isSelected = ex.id === currentExam.id;
                     const examRooms = rooms.filter(r => ex.roomIds?.includes(r.id));
+                    const totalCapacity = examRooms.reduce((sum, room) => sum + (room.capacity || 0), 0);
+                    const registrations = ex.registrationsCount || 0;
+                    const isInsufficient = totalCapacity < registrations;
 
                     return (
                       <div key={ex.id} className="space-y-1">
@@ -252,11 +255,11 @@ export default function AllocationManager({
                             <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${
                               examRooms.length === 0 
                                 ? 'bg-rose-100 text-rose-700' 
-                                : examRooms.length < (ex.roomsNeeded || 1)
-                                  ? 'bg-amber-100 text-amber-800'
+                                : isInsufficient
+                                  ? 'bg-rose-100 text-rose-700'
                                   : 'bg-emerald-100 text-emerald-800'
                             }`}>
-                              {examRooms.length} / {ex.roomsNeeded || 1}
+                              {totalCapacity} / {registrations}
                             </span>
                           </div>
                           <div className="text-[9px] text-slate-500 flex flex-wrap items-center gap-2">

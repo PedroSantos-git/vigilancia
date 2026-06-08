@@ -34,11 +34,13 @@ export default function RoomManager({
   // Form states
   const [name, setName] = useState('');
   const [capacity, setCapacity] = useState(15);
+  const [floor, setFloor] = useState('');
 
   const handleOpenAdd = () => {
     setEditingRoom(null);
     setName('');
     setCapacity(15);
+    setFloor('');
     setError(null);
     setIsModalOpen(true);
   };
@@ -47,6 +49,7 @@ export default function RoomManager({
     setEditingRoom(room);
     setName(room.name);
     setCapacity(room.capacity);
+    setFloor(room.floor || '');
     setError(null);
     setIsModalOpen(true);
   };
@@ -75,7 +78,8 @@ export default function RoomManager({
       onUpdateRoom({
         ...editingRoom,
         name: name.trim(),
-        capacity: Number(capacity)
+        capacity: Number(capacity),
+        floor: floor.trim() || undefined
       });
     } else {
       const maxPriority = rooms.length > 0 ? Math.max(...rooms.map(r => r.priority)) : 0;
@@ -83,6 +87,7 @@ export default function RoomManager({
         id: `r_${Date.now()}`,
         name: name.trim(),
         capacity: Number(capacity),
+        floor: floor.trim() || undefined,
         priority: maxPriority + 1
       });
     }
@@ -190,6 +195,11 @@ export default function RoomManager({
                   {room.capacity} {lang === 'pt' ? 'Alunos' : 'Students'}
                 </span>
               </div>
+              {room.floor && (
+                <div className="mt-1 text-[10px] text-slate-400 font-medium">
+                  {t.floor}: {room.floor}
+                </div>
+              )}
             </div>
           ))
         ) : (
@@ -247,6 +257,19 @@ export default function RoomManager({
                   required
                   value={capacity}
                   onChange={(e) => setCapacity(Number(e.target.value))}
+                  className="w-full border border-slate-200 rounded-lg px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                  {t.floor}
+                </label>
+                <input
+                  type="text"
+                  value={floor}
+                  onChange={(e) => setFloor(e.target.value)}
+                  placeholder="ex. 1º Andar, Bloco B, Piso 2"
                   className="w-full border border-slate-200 rounded-lg px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500"
                 />
               </div>

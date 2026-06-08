@@ -131,31 +131,17 @@ export default function ExamRoomManager({
       ex.id !== examToCheck.id
     );
 
+    const currentPeriod = getPeriodFromTime(examToCheck.time);
+
     for (const otherEx of examsInRoom) {
-      const otherStart = otherEx.time;
-      const otherEnd = addMinutes(otherStart, (otherEx.duration || 120) + (otherEx.tolerance || 30));
-      const bufferEnd = addMinutes(otherEnd, 45); // 45 min buffer for "free" status
-
-      const currentStart = examToCheck.time;
-      const currentEnd = addMinutes(currentStart, (examToCheck.duration || 120) + (examToCheck.tolerance || 30));
-
-      // 1. Absolute overlap (Occupied)
-      // If current exam starts before other exam ends, it's occupied
-      if (isTimeBefore(currentStart, otherEnd) && isTimeBefore(otherStart, currentEnd)) {
+      const otherPeriod = getPeriodFromTime(otherEx.time);
+      
+      // If periods are the same, room is occupied!
+      if (otherPeriod === currentPeriod) {
         return { 
           status: 'occupied', 
           conflictingExam: otherEx,
-          message: lang === 'pt' ? 'Ocupada / Conflito' : 'Occupied / Conflict'
-        };
-      }
-
-      // 2. Warning period (within 45 min of previous exam end)
-      // If current exam starts after other exam ends, but before buffer ends
-      if (!isTimeBefore(currentStart, otherEnd) && isTimeBefore(currentStart, bufferEnd)) {
-        return { 
-          status: 'warning', 
-          conflictingExam: otherEx,
-          message: lang === 'pt' ? 'Atenção: Intervalo Curto' : 'Warning: Short Buffer'
+          message: lang === 'pt' ? 'Ocupada / Conflito (Mesmo Período)' : 'Occupied / Conflict (Same Period)'
         };
       }
     }
@@ -178,8 +164,8 @@ export default function ExamRoomManager({
         if (status === 'occupied' && conflictingExam) {
           alert(
             lang === 'pt'
-              ? `Impossível Associar!\nA sala "${room.name}" já se encontra em uso no Exame "${conflictingExam.name}" no mesmo dia (${conflictingExam.date}) e ainda não terá terminado (Duração + Tolerância).`
-              : `Cannot Associate!\nRoom "${room.name}" is already reserved for Exam "${conflictingExam.name}" and won't be finished yet (Duration + Tolerance).`
+              ? `Impossível Associar!\nA sala "${room.name}" já se encontra em uso no Exame "${conflictingExam.name}" no mesmo período (${conflictingExam.time}).`
+              : `Cannot Associate!\nRoom "${room.name}" is already reserved for Exam "${conflictingExam.name}" during the same period (${conflictingExam.time}).`
           );
           return;
         }
@@ -243,19 +229,20 @@ export default function ExamRoomManager({
                 
                 <div className="space-y-2 pl-3 border-l-2 border-slate-100">
                   {group.exams.map(ex => {
-                    const numRoomsAssoc = ex.roomIds?.length || 0;
-                    const roomsNeeded = ex.roomsNeeded || 1;
+                    const associatedRooms = rooms.filter(r => ex.roomIds?.includes(r.id));
+                    const totalCapacity = associatedRooms.reduce((sum, room) => sum + (room.capacity || 0), 0);
+                    const registrations = ex.registrationsCount || 0;
                     const isSelected = ex.id === selectedExamId;
 
                     let statusColor = 'bg-slate-100 text-slate-500';
                     let borderColor = 'border-slate-150';
                     
-                    if (numRoomsAssoc === 0) {
+                    if (associatedRooms.length === 0) {
                       statusColor = 'bg-rose-100 text-rose-700';
                       if (isSelected) borderColor = 'border-rose-500';
-                    } else if (numRoomsAssoc < roomsNeeded) {
-                      statusColor = 'bg-amber-100 text-amber-800';
-                      if (isSelected) borderColor = 'border-amber-500';
+                    } else if (totalCapacity < registrations) {
+                      statusColor = 'bg-rose-100 text-rose-700';
+                      if (isSelected) borderColor = 'border-rose-500';
                     } else {
                       statusColor = 'bg-emerald-100 text-emerald-800';
                       if (isSelected) borderColor = 'border-emerald-600';
@@ -278,7 +265,7 @@ export default function ExamRoomManager({
                             {ex.name}
                           </span>
                           <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${statusColor}`}>
-                            {numRoomsAssoc} / {roomsNeeded}
+                            {totalCapacity} / {registrations}
                           </span>
                         </div>
 
@@ -369,14 +356,22 @@ export default function ExamRoomManager({
                 </div>
               </div>
               
-              <div className="bg-blue-600 rounded-2xl p-5 text-center flex flex-col justify-center shadow-lg shadow-blue-600/20 border border-blue-500/50 min-w-[120px]">
-                <span className="text-[10px] text-blue-100 uppercase tracking-widest font-bold">
-                  {lang === 'pt' ? 'Salas' : 'Rooms'}
-                </span>
-                <span className="text-3xl font-black text-white mt-1">
-                  {currentExam.roomIds?.length || 0}
-                </span>
-              </div>
+              {(() => {
+                const associatedRooms = rooms.filter(r => currentExam.roomIds?.includes(r.id));
+                const totalCapacity = associatedRooms.reduce((sum, room) => sum + (room.capacity || 0), 0);
+                const registrations = currentExam.registrationsCount || 0;
+                const isInsufficient = totalCapacity < registrations;
+                return (
+                  <div className={`rounded-2xl p-5 text-center flex flex-col justify-center shadow-lg border min-w-[140px] ${isInsufficient ? 'bg-rose-600 shadow-rose-600/20 border-rose-500/50' : 'bg-emerald-600 shadow-emerald-600/20 border-emerald-500/50'}`}>
+                    <span className="text-[10px] uppercase tracking-widest font-bold text-white/90">
+                      {lang === 'pt' ? 'Capacidade / Inscritos' : 'Capacity / Registrations'}
+                    </span>
+                    <span className="text-3xl font-black text-white mt-1">
+                      {totalCapacity} / {registrations}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
@@ -386,7 +381,7 @@ export default function ExamRoomManager({
             </h4>
 
             {/* List of Rooms */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            <div className="grid grid-cols-1 gap-2">
               {rooms.map(room => {
                 const isAssoc = currentExam.roomIds?.includes(room.id);
                 const { status, conflictingExam, message } = getRoomStatus(room, currentExam);
@@ -401,7 +396,7 @@ export default function ExamRoomManager({
                         handleToggleRoom(room.id);
                       }
                     }}
-                    className={`p-4 rounded-xl border transition flex flex-col justify-between gap-3 cursor-pointer select-none relative overflow-hidden ${
+                    className={`px-3 py-2 rounded-lg border transition flex items-center justify-between gap-3 cursor-pointer select-none relative overflow-hidden ${
                       isAssoc 
                         ? 'border-emerald-600 bg-emerald-50/35 relative' 
                         : status === 'occupied'
@@ -413,41 +408,37 @@ export default function ExamRoomManager({
                   >
                     {/* Ribbon or corner item */}
                     {isAssoc && (
-                      <div className="absolute top-0 right-0 w-8 h-8 bg-emerald-500/10 flex items-center justify-center rounded-bl-xl text-emerald-600">
-                        <Check className="h-4 w-4" />
+                      <div className="absolute top-0 right-0 w-6 h-6 bg-emerald-500/10 flex items-center justify-center rounded-bl-lg text-emerald-600">
+                        <Check className="h-3 w-3" />
                       </div>
                     )}
 
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className={`p-1 rounded ${status === 'warning' ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-600'}`}>
-                          <Home className="h-3.5 w-3.5" />
-                        </span>
-                        <span className={`text-xs font-bold ${status === 'warning' ? 'text-amber-900' : 'text-slate-800'}`}>
-                          {room.name}
-                        </span>
-                      </div>
-
-                      <div className="mt-3 flex items-center gap-1 text-[10px] text-slate-500 font-medium">
-                        <Hash className="h-3 w-3 text-slate-400" />
-                        <span>Capacidade: <strong>{room.capacity}</strong> pax</span>
-                      </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`p-1 rounded ${status === 'warning' ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-600'}`}>
+                        <Home className="h-3 w-3" />
+                      </span>
+                      <span className={`text-xs font-bold ${status === 'warning' ? 'text-amber-900' : 'text-slate-800'}`}>
+                        {room.name}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-medium">
+                        Capacidade: <strong>{room.capacity}</strong>
+                      </span>
                     </div>
 
-                    <div className="border-t border-slate-100 pt-2.5 mt-1 flex justify-between items-center">
+                    <div className="flex items-center gap-2">
                       {isAssoc ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 uppercase tracking-wide">
-                          <Check className="h-2.5 w-2.5" />
+                          <Check className="h-2 w-2" />
                           {t.associatedBadge}
                         </span>
                       ) : status === 'occupied' ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold bg-rose-100 text-rose-800">
-                          <AlertTriangle className="h-2.5 w-2.5" />
+                          <AlertTriangle className="h-2 w-2" />
                           {message}
                         </span>
                       ) : status === 'warning' ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800">
-                          <Clock className="h-2.5 w-2.5" />
+                          <Clock className="h-2 w-2" />
                           {message}
                         </span>
                       ) : (
@@ -457,7 +448,7 @@ export default function ExamRoomManager({
                       )}
 
                       {conflictingExam && (
-                        <div className={`text-[9px] max-w-[150px] truncate leading-none italic ${status === 'warning' ? 'text-amber-700' : 'text-rose-700'}`}>
+                        <div className={`text-[9px] max-w-[120px] truncate leading-none italic ${status === 'warning' ? 'text-amber-700' : 'text-rose-700'}`}>
                           ({conflictingExam.name})
                         </div>
                       )}

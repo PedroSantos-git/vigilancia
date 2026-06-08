@@ -77,10 +77,11 @@ function buildDayBusySet(allocations: Allocation[], examById: Map<string, Exam>)
   for (const alloc of allocations) {
     const exam = examById.get(alloc.examId);
     if (!exam) continue;
+    const period = getPeriodFromTime(exam.time);
 
     const assigned = [alloc.invigilator1Id, alloc.invigilator2Id, alloc.substituteId];
     for (const teacherId of assigned) {
-      if (teacherId) busySet.add(`${teacherId}@@${exam.date}`);
+      if (teacherId) busySet.add(`${teacherId}@@${exam.date}@@${period}`);
     }
   }
   return busySet;
@@ -91,10 +92,11 @@ function markAllocationBusy(
   exam: Exam,
   dayBusy: Set<string>
 ): void {
-  const assigned = [allocation.invigilator1Id, allocation.invigilator2Id, allocation.substituteId];
+  const period = getPeriodFromTime(exam.time);
+  const assigned = [allocation.invigilator1Id, alloc.invigilator2Id, allocation.substituteId];
   for (const teacherId of assigned) {
     if (!teacherId) continue;
-    dayBusy.add(`${teacherId}@@${exam.date}`);
+    dayBusy.add(`${teacherId}@@${exam.date}@@${period}`);
   }
 }
 
@@ -116,9 +118,20 @@ function incrementAssignmentCount(assignmentCounts: Map<string, number>, teacher
 function pickCandidateForPhase(
   candidates: Teacher[],
   _basePool: Teacher[],
-  assignmentCounts: Map<string, number>
+  assignmentCounts: Map<string, number>,
+  needsEE: boolean = false
 ): Teacher | null {
   if (candidates.length === 0) return null;
+
+  // If we need an EE teacher, filter candidates first
+  if (needsEE) {
+    const eeCandidates = candidates.filter(teacher => teacher.EE);
+    if (eeCandidates.length > 0) {
+      const minAssignedCount = Math.min(...eeCandidates.map(teacher => getAssignmentCount(assignmentCounts, teacher.id)));
+      const leastUsedPool = eeCandidates.filter(teacher => getAssignmentCount(assignmentCounts, teacher.id) === minAssignedCount);
+      return randomPick(leastUsedPool);
+    }
+  }
 
   const minAssignedCount = Math.min(...candidates.map(teacher => getAssignmentCount(assignmentCounts, teacher.id)));
   const leastUsedPool = candidates.filter(teacher => getAssignmentCount(assignmentCounts, teacher.id) === minAssignedCount);
@@ -187,17 +200,30 @@ function runAutoAllocationForPairs(
         alloc.invigilator2Id,
         alloc.substituteId
       ]);
-      const dayKeySuffix = `@@${pair.exam.date}`;
 
+      const currentPeriod = getPeriodFromTime(pair.exam.time);
+      const dayKeySuffix = `@@${pair.exam.date}@@${currentPeriod}`;
+      
       const allowedByRules = basePool.filter(teacher => {
         if (alreadyInRoom.has(teacher.id)) return false;
         if (hasSubjectConflict(teacher, pair.exam)) return false;
-        if (isTeacherUnavailableOnDate(teacher, pair.exam.date)) return false;
+        
+        // Check if teacher is unavailable at this date and period, with exam details
+        if (isTeacherUnavailableAt(teacher, pair.exam.date, pair.exam.time, pair.exam)) return false;
+        
+        // Check if teacher is already busy in this period
         if (dayBusy.has(`${teacher.id}${dayKeySuffix}`)) return false;
+        
+        // Check PISO_ZERO rule: only assign to floor 0 if teacher has PISO_ZERO
+        if (teacher.PISO_ZERO && pair.room.floor !== "0") return false;
+        
+        // Check EE rule: if exam requires EE, at least one invigilator must be EE
+        // For now, we'll prioritize EE teachers for the first slot if exam needs EE
         return true;
       });
 
-      const selected = pickCandidateForPhase(allowedByRules, basePool, assignmentCounts);
+      // Check if we need to prioritize EE teacher for this exam/phase
+      const selected = pickCandidateForPhase(allowedByRules, basePool, assignmentCounts, pair.exam.EE && phase === "invigilator1Id");
 
       if (!selected) {
         warnings.push(
@@ -293,33 +319,35 @@ export function autoAllocateRooms(
   const updatedExams = [...exams];
 
   sortedExams.forEach(exam => {
-    const roomsNeeded = exam.roomsNeeded || 1;
+    const registrationsNeeded = exam.registrationsCount || 0;
     const currentRooms = exam.roomIds || [];
     
-    if (currentRooms.length >= roomsNeeded) return;
+    const roomById = new Map(rooms.map(room => [room.id, room]));
+    let currentCapacity = currentRooms.reduce((sum, roomId) => sum + (roomById.get(roomId)?.capacity || 0), 0);
+    
+    if (currentCapacity >= registrationsNeeded) return;
 
     const roomsToAssign: string[] = [...currentRooms];
 
+    // Get the period for the current exam (morning or afternoon)
+    const currentPeriod = getPeriodFromTime(exam.time);
+
     for (const room of sortedRooms) {
-      if (roomsToAssign.length >= roomsNeeded) break;
+      if (currentCapacity >= registrationsNeeded) break;
       if (roomsToAssign.includes(room.id)) continue;
 
-      // Check if room is available
+      // Check if room is available: only check if the room is used in the same period on the same date
       const isAvailable = updatedExams.every(otherEx => {
         if (!otherEx.roomIds?.includes(room.id) || otherEx.date !== exam.date || otherEx.id === exam.id) return true;
-
-        const otherStart = otherEx.time;
-        const otherEndWithBuffer = addMinutes(otherStart, (otherEx.duration || 120) + (otherEx.tolerance || 30) + 45);
         
-        const currentStart = exam.time;
-        const currentEndWithBuffer = addMinutes(currentStart, (exam.duration || 120) + (exam.tolerance || 30) + 45);
-
-        // Standard overlap check with buffer
-        return !isTimeOverlap(currentStart, currentEndWithBuffer, otherStart, otherEndWithBuffer);
+        const otherPeriod = getPeriodFromTime(otherEx.time);
+        // If periods are different, room is available
+        return otherPeriod !== currentPeriod;
       });
 
       if (isAvailable) {
         roomsToAssign.push(room.id);
+        currentCapacity += room.capacity;
       }
     }
 
@@ -358,12 +386,23 @@ export function getPeriodFromTime(time: string): "09:00" | "14:00" {
 /**
  * Checks if a teacher has registered a personal unavailability for a specific date and time.
  */
-export function isTeacherUnavailableAt(teacher: Teacher, date: string, time: string): boolean {
+export function isTeacherUnavailableAt(teacher: Teacher, date: string, time: string, exam?: Exam): boolean {
   if (!teacher.unavailabilities) return false;
   const period = getPeriodFromTime(time);
-  return teacher.unavailabilities.some(un => 
-    un.date === date && (un.time === "all" || un.time === period)
-  );
+  return teacher.unavailabilities.some(un => {
+    // Basic date/period check
+    if (un.date !== date && un.date !== "all") return false;
+    if (un.time !== "all" && un.time !== period) return false;
+    
+    // Check year if specified
+    if (un.year && exam && un.year !== exam.year) return false;
+    
+    // Check subject group if specified
+    if (un.subject_group && exam && un.subject_group !== exam.subject_group) return false;
+    
+    // If all checks pass, it's an unavailability
+    return true;
+  });
 }
 
 /**

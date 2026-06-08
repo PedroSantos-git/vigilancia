@@ -20,8 +20,9 @@ CREATE TABLE IF NOT EXISTS teachers (
     subject TEXT NOT NULL,
     role TEXT REFERENCES teacher_roles(id),
     email TEXT UNIQUE,
-    phone TEXT,
     available BOOLEAN DEFAULT TRUE,
+    EE BOOLEAN DEFAULT FALSE,
+    PISO_ZERO BOOLEAN DEFAULT FALSE,
     unavailabilities JSONB DEFAULT '[]'::jsonb
 );
 
@@ -29,16 +30,25 @@ CREATE TABLE IF NOT EXISTS rooms (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     capacity INTEGER NOT NULL,
-    floor TEXT
+    floor TEXT,
+    priority INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS exams (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    subject TEXT NOT NULL,
-    date TEXT NOT NULL,
-    time TEXT NOT NULL,
-    room_ids JSONB DEFAULT '[]'::jsonb
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  variant TEXT,
+  subject_group TEXT NOT NULL,
+  year TEXT NOT NULL,
+  code TEXT,
+  date TEXT NOT NULL,
+  time TEXT NOT NULL,
+  shift TEXT,
+  modality TEXT,
+  phase TEXT NOT NULL,
+  registrations_count INTEGER DEFAULT 0,
+  EE BOOLEAN DEFAULT FALSE,
+  room_ids JSONB DEFAULT '[]'::jsonb
 );
 
 CREATE TABLE IF NOT EXISTS allocations (

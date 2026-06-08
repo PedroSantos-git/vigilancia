@@ -5,8 +5,10 @@
 
 export interface TeacherUnavailability {
   id: string;
-  date: string; // YYYY-MM-DD
+  date: string | "all"; // YYYY-MM-DD or "all"
   time: "09:00" | "14:00" | "all";
+  year?: string; // Year of exam
+  subject_group?: string; // Subject group of exam
 }
 
 export interface Teacher {
@@ -16,8 +18,9 @@ export interface Teacher {
   subject: string;      // e.g. "Matemática", "Português"
   role: string;         // e.g. "QA", "Contratado", "Quadro"
   email: string;
-  phone?: string;
   available: boolean;   // Check if available for invigilation
+  EE: boolean;          // Educação Especial
+  PISO_ZERO: boolean;   // Only assign to floor 0 rooms
   unavailabilities?: TeacherUnavailability[];
 }
 
@@ -31,20 +34,19 @@ export interface Room {
 
 export interface Exam {
   id: string;
-  name: string;         // e.g. "Matemática"
-  variant?: string | null; // e.g. "A", "B", "LNM"
-  subject_group: string; // e.g. "300", "500" (NOT NULL)
-  year: string;         // e.g. "9", "11", "12"
-  code?: string | null;  // e.g. "635", "92"
-  date: string;         // YYYY-MM-DD
-  time: string;         // e.g. "08:45"
-  shift?: string | null; // e.g. "T1", "T2"
-  modality?: string | null; // e.g. "LO", "SP", "NE", "EE"
-  phase: string;        // "1", "2"
-  duration: number;     // In minutes
-  tolerance: number;    // In minutes
-  roomsNeeded: number;  // Number of rooms required for this exam
-  roomIds?: string[];   // Associated room IDs for this exam
+  name: string; // e.g., "Matemática"
+  variant?: string | null; // e.g., "A", "B", "LNM"
+  subject_group: string; // e.g., "500", "300" (NOT NULL)
+  year: string; // e.g., "9", "11", "12"
+  code?: string | null;  // e.g., "635", "92"
+  date: string; // YYYY-MM-DD
+  time: string; // e.g., "08:45"
+  shift?: string | null; // e.g., "T1", "T2"
+  modality?: string | null; // e.g., "LO", "SP", "NE", "EE"
+  phase: string; // "1", "2"
+  registrationsCount: number; // Number of students registered for this exam (N_Inscritos)
+  EE: boolean; // Needs at least one EE teacher
+  roomIds?: string[]; // Associated room IDs for this exam
 }
 
 export interface Allocation {

@@ -77,9 +77,8 @@ export default function ExamManager({
   const [shift, setShift] = useState<string | null>(null);
   const [modality, setModality] = useState<string | null>(null);
   const [phase, setPhase] = useState('1');
-  const [duration, setDuration] = useState(120);
-  const [tolerance, setTolerance] = useState(30);
-  const [roomsNeeded, setRoomsNeeded] = useState(1);
+  const [registrationsCount, setRegistrationsCount] = useState(0);
+  const [EE, setEE] = useState(false);
 
   const getDefaultTimes = (examYear: string, examName: string) => {
     if (examYear === '9') return { duration: 90, tolerance: 30 };
@@ -99,9 +98,8 @@ export default function ExamManager({
     setShift(null);
     setModality(null);
     setPhase('1');
-    setDuration(120);
-    setTolerance(30);
-    setRoomsNeeded(1);
+    setRegistrationsCount(0);
+    setEE(false);
     setIsModalOpen(true);
   };
 
@@ -117,9 +115,8 @@ export default function ExamManager({
     setShift(ex.shift || null);
     setModality(ex.modality || null);
     setPhase(ex.phase);
-    setDuration(ex.duration || 120);
-    setTolerance(ex.tolerance || 30);
-    setRoomsNeeded(ex.roomsNeeded || 1);
+    setRegistrationsCount(ex.registrationsCount || 0);
+    setEE(ex.EE || false);
     setIsModalOpen(true);
   };
 
@@ -141,9 +138,8 @@ export default function ExamManager({
       shift,
       modality,
       phase,
-      duration,
-      tolerance,
-      roomsNeeded
+      registrationsCount,
+      EE
     };
 
     if (editingExam) {
@@ -192,8 +188,8 @@ export default function ExamManager({
     doc.text(timestamp, 15, 30);
 
     const headers = lang === 'pt'
-      ? [['Data', 'Hora', 'Fase', 'Exame', 'Ano', 'Código', 'Variante', 'Turno', 'Modalidade', 'Salas']]
-      : [['Date', 'Time', 'Phase', 'Exam', 'Year', 'Code', 'Variant', 'Shift', 'Modality', 'Rooms']];
+      ? [['Data', 'Hora', 'Fase', 'Exame', 'Ano', 'Código', 'Variante', 'Turno', 'Modalidade', 'Inscritos', 'EE']]
+      : [['Date', 'Time', 'Phase', 'Exam', 'Year', 'Code', 'Variant', 'Shift', 'Modality', 'Registrations', 'EE']];
 
     const sortedExams = [...exams].sort((a, b) => {
       const dateCompare = a.date.localeCompare(b.date);
@@ -211,7 +207,8 @@ export default function ExamManager({
       ex.variant || '-',
       ex.shift || '-',
       ex.modality || '-',
-      (ex.roomsNeeded || 1).toString()
+      (ex.registrationsCount || 0).toString(),
+      ex.EE ? 'Sim' : 'Não'
     ]);
 
     autoTable(doc, {
@@ -371,8 +368,9 @@ export default function ExamManager({
                                 {ex.variant && <span className="flex items-center gap-1"><Tag className="h-3 w-3" /> {ex.variant}</span>}
                                 {ex.modality && <span className="flex items-center gap-1"><Bookmark className="h-3 w-3" /> {ex.modality}</span>}
                                 <span className="flex items-center gap-1 bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-bold">
-                                  <Home className="h-3 w-3" /> {ex.roomsNeeded || 1} {lang === 'pt' ? 'Salas' : 'Rooms'}
-                                </span>
+                              <Home className="h-3 w-3" /> {ex.registrationsCount || 0} {lang === 'pt' ? 'Inscritos' : 'Registrations'}
+                            </span>
+                            {ex.EE && <span className="flex items-center gap-1 bg-red-50 text-red-700 px-1.5 py-0.5 rounded font-bold">EE</span>}
                               </div>
                             </div>
                             <div className="flex space-x-1">
@@ -475,16 +473,20 @@ export default function ExamManager({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Duração (min) *</label>
-                  <input type="number" required value={duration} onChange={(e) => setDuration(Number(e.target.value))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-blue-500" />
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Número de Inscritos *</label>
+                  <input type="number" required min="0" value={registrationsCount} onChange={(e) => setRegistrationsCount(Number(e.target.value))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-blue-500" />
                 </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Tolerância (min) *</label>
-                  <input type="number" required value={tolerance} onChange={(e) => setTolerance(Number(e.target.value))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Salas Necessárias *</label>
-                  <input type="number" required min="1" value={roomsNeeded} onChange={(e) => setRoomsNeeded(Number(e.target.value))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-blue-500" />
+                <div className="flex items-center pt-6">
+                  <input
+                    type="checkbox"
+                    id="exam-ee"
+                    checked={EE}
+                    onChange={(e) => setEE(e.target.checked)}
+                    className="mr-2"
+                  />
+                  <label htmlFor="exam-ee" className="text-xs text-slate-700 font-medium">
+                    Necessita de Docente EE
+                  </label>
                 </div>
               </div>
 
