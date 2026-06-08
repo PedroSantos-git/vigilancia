@@ -135,7 +135,18 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     }).then(r => r.json()),
-    bulk: (data: { teachers: any[], exams: any[], rooms: any[], roles: any[] }) => fetch(`${API_BASE}/bulk-data`, {
+    bulk: (data: {
+      teachers: any[];
+      exams: any[];
+      rooms: any[];
+      roles: any[];
+      sheetsPresent?: {
+        Docentes: boolean;
+        Exames: boolean;
+        Salas: boolean;
+        Cargos: boolean;
+      };
+    }) => fetch(`${API_BASE}/bulk-data`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)

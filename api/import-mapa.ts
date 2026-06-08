@@ -16,7 +16,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // 1. Limpar dados dependentes antes da nova importacao
+    // 1. Limpar dados das tabelas importadas antes da nova importacao
+    await sql`BEGIN`;
     await sql`DELETE FROM allocations`;
     await sql`DELETE FROM exams`;
     await sql`DELETE FROM teachers`;
@@ -75,6 +76,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       `;
     }
 
+    await sql`COMMIT`;
+
     return res.status(200).json({ 
       message: 'Import successful',
       stats: {
@@ -89,6 +92,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     });
   } catch (error: any) {
+    try {
+      await sql`ROLLBACK`;
+    } catch (rollbackError) {
+      console.error('Import mapa rollback error:', rollbackError);
+    }
+
     console.error('Import error detail:', error);
     return res.status(500).json({ 
       error: 'Internal Server Error during import',

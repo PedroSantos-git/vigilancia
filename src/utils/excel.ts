@@ -71,7 +71,13 @@ export const importFromExcel = async (
   teachers: Partial<Teacher>[],
   exams: Partial<Exam>[],
   rooms: Partial<Room>[],
-  roles: { name: string }[]
+  roles: { name: string }[],
+  sheetsPresent: {
+    Docentes: boolean;
+    Exames: boolean;
+    Salas: boolean;
+    Cargos: boolean;
+  };
 }> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -80,17 +86,24 @@ export const importFromExcel = async (
         const data = e.target?.result;
         const workbook = XLSX.read(data, { type: 'binary' });
 
+        const sheetsPresent = {
+          Docentes: Boolean(workbook.Sheets["Docentes"]),
+          Exames: Boolean(workbook.Sheets["Exames"]),
+          Salas: Boolean(workbook.Sheets["Salas"]),
+          Cargos: Boolean(workbook.Sheets["Cargos"])
+        };
+
         const getSheetData = (name: string) => {
           const ws = workbook.Sheets[name];
           return ws ? XLSX.utils.sheet_to_json(ws) : [];
         };
 
         // 1. Roles
-        const rawRoles = getSheetData("Cargos") as any[];
+        const rawRoles = sheetsPresent.Cargos ? (getSheetData("Cargos") as any[]) : [];
         const importedRoles = rawRoles.map(r => ({ name: r.Nome }));
 
         // 2. Rooms
-        const rawRooms = getSheetData("Salas") as any[];
+        const rawRooms = sheetsPresent.Salas ? (getSheetData("Salas") as any[]) : [];
         const importedRooms = rawRooms.map(r => ({
         name: String(r.Nome),
         capacity: Number(r.Capacidade) || 15,
@@ -99,7 +112,7 @@ export const importFromExcel = async (
       }));
 
         // 3. Teachers
-        const rawTeachers = getSheetData("Docentes") as any[];
+        const rawTeachers = sheetsPresent.Docentes ? (getSheetData("Docentes") as any[]) : [];
         const importedTeachers = rawTeachers.map(t => {
           let unavailabilities = [];
           try {
@@ -123,7 +136,7 @@ export const importFromExcel = async (
         });
 
         // 4. Exams
-        const rawExams = getSheetData("Exames") as any[];
+        const rawExams = sheetsPresent.Exames ? (getSheetData("Exames") as any[]) : [];
         const importedExams = rawExams.map(e => ({
           name: String(e.Nome),
           variant: e.Variante ? String(e.Variante) : null,
@@ -143,7 +156,8 @@ export const importFromExcel = async (
           teachers: importedTeachers,
           exams: importedExams,
           rooms: importedRooms,
-          roles: importedRoles
+          roles: importedRoles,
+          sheetsPresent
         });
       } catch (err) {
         reject(err);

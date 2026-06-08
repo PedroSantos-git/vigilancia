@@ -88,11 +88,18 @@ export default function BackupLogs({ lang }: BackupLogsProps) {
         throw new Error(result.detail || result.error);
       }
 
+      const clearedTables = result.cleared
+        ? Object.entries(result.cleared)
+            .filter(([, wasCleared]) => wasCleared)
+            .map(([table]) => table)
+            .join(', ')
+        : '';
+
       setStatus({
         type: 'success',
-        message: lang === 'pt' 
-          ? `Importação concluída: ${result.stats.teachers} professores, ${result.stats.exams} exames.` 
-          : `Import finished: ${result.stats.teachers} teachers, ${result.stats.exams} exams.`
+        message: lang === 'pt'
+          ? `Importação concluída: ${result.stats.teachers} professores, ${result.stats.exams} exames, ${result.stats.rooms} salas, ${result.stats.roles} cargos.${clearedTables ? ` Tabelas limpas: ${clearedTables}.` : ''}`
+          : `Import finished: ${result.stats.teachers} teachers, ${result.stats.exams} exams, ${result.stats.rooms} rooms, ${result.stats.roles} roles.${clearedTables ? ` Cleared tables: ${clearedTables}.` : ''}`
       });
       
       // Refresh local state or force reload
