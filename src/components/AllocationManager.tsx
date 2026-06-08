@@ -194,14 +194,6 @@ export default function AllocationManager({
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => onAutoTriggerForExam(currentExam.id)}
-            disabled={!hasSpecificRooms}
-            className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition cursor-pointer shadow-sm"
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            <span>{lang === 'pt' ? 'Atribuir vigilantes' : 'Assign invigilators'}</span>
-          </button>
-          <button
             onClick={() => onClearAllocationsForExam(currentExam.id)}
             className="flex items-center space-x-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-xs font-semibold px-4 py-2.5 rounded-lg transition cursor-pointer"
           >
@@ -436,7 +428,7 @@ export default function AllocationManager({
                                 >
                                   <option value="">-- {t.manualOptionSelect} --</option>
                                   {optionsList((allocation as any)[role.key], role.key).map(tchr => (
-                                    <option key={tchr.id} value={tchr.id}>{tchr.name} ({tchr.subject_group})</option>
+                                    <option key={tchr.id} value={tchr.id}>{tchr.name} ({tchr.subject_group} - {tchr.subject})</option>
                                   ))}
                                 </select>
                                 {(allocation as any)[role.key] && (

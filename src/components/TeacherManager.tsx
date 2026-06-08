@@ -180,6 +180,14 @@ export default function TeacherManager({
   });
 
   const handleExportPDF = () => {
+    // Create a map from subject_group to subject name using exams
+    const groupToSubject = new Map<string, string>();
+    exams.forEach(ex => {
+      if (!groupToSubject.has(ex.subject_group)) {
+        groupToSubject.set(ex.subject_group, ex.name);
+      }
+    });
+
     const doc = new jsPDF();
     doc.setFontSize(16);
     doc.text(lang === 'pt' ? 'Lista de Professores' : 'Teachers List', 14, 15);
@@ -208,7 +216,21 @@ export default function TeacherManager({
       t.subject,
       availableRoles.find(r => r.id === t.role)?.name || t.role || '-',
       t.unavailabilities && t.unavailabilities.length > 0 
-        ? t.unavailabilities.map(u => `${u.date === 'all' ? (lang === 'pt' ? 'Todas as datas' : 'All dates') : u.date} ${u.time === 'all' ? '' : `(${u.time === '09:00' ? (lang === 'pt' ? 'Manhã' : 'Morning') : (lang === 'pt' ? 'Tarde' : 'Afternoon')})`} ${u.year ? `Ano ${u.year}` : ''} ${u.subject_group ? `Grupo ${u.subject_group}` : ''}`).join('; ')
+        ? t.unavailabilities.map(u => {
+            let parts: string[] = [];
+            parts.push(u.date === 'all' ? (lang === 'pt' ? 'Todas as datas' : 'All dates') : u.date);
+            if (u.time !== 'all') {
+              parts.push(`(${u.time === '09:00' ? (lang === 'pt' ? 'Manhã' : 'Morning') : (lang === 'pt' ? 'Tarde' : 'Afternoon')})`);
+            }
+            if (u.year) {
+              parts.push(`Ano ${u.year}`);
+            }
+            if (u.subject_group) {
+              const subjectName = groupToSubject.get(u.subject_group) || '';
+              parts.push(`Grupo ${u.subject_group}${subjectName ? ` - ${subjectName}` : ''}`);
+            }
+            return parts.join(' ');
+          }).join('; ')
         : (lang === 'pt' ? 'Nenhuma' : 'None')
     ]);
 
@@ -244,16 +266,19 @@ export default function TeacherManager({
           lang === 'pt' ? 'Data' : 'Date',
           lang === 'pt' ? 'Período' : 'Period',
           lang === 'pt' ? 'Ano' : 'Year',
-          lang === 'pt' ? 'Grupo' : 'Group'
+          lang === 'pt' ? 'Grupo / Disciplina' : 'Group / Subject'
         ]];
 
-        const summaryData = allUnavailabilities.map(u => [
-          u.teacherName,
-          u.date === 'all' ? (lang === 'pt' ? 'Todas as datas' : 'All dates') : u.date,
-          u.time === 'all' ? (lang === 'pt' ? 'Todo o dia' : 'All day') : (u.time === '09:00' ? (lang === 'pt' ? 'Manhã' : 'Morning') : (lang === 'pt' ? 'Tarde' : 'Afternoon')),
-          u.year || '-',
-          u.subject_group || '-'
-        ]);
+        const summaryData = allUnavailabilities.map(u => {
+          const subjectName = u.subject_group ? (groupToSubject.get(u.subject_group) || '') : '';
+          return [
+            u.teacherName,
+            u.date === 'all' ? (lang === 'pt' ? 'Todas as datas' : 'All dates') : u.date,
+            u.time === 'all' ? (lang === 'pt' ? 'Todo o dia' : 'All day') : (u.time === '09:00' ? (lang === 'pt' ? 'Manhã' : 'Morning') : (lang === 'pt' ? 'Tarde' : 'Afternoon')),
+            u.year || '-',
+            u.subject_group ? `${u.subject_group}${subjectName ? ` - ${subjectName}` : ''}` : '-'
+          ];
+        });
 
         autoTable(doc, {
           head: summaryHeaders,
