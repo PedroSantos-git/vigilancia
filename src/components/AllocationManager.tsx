@@ -20,6 +20,7 @@ import {
   Home,
   Layers
 } from 'lucide-react';
+import { findAllocationForExamRoom } from '../utils/allocations';
 import { getPeriodFromTime, hasSubjectConflict, isTeacherUnavailableAt } from '../utils/scheduler';
 
 interface AllocationManagerProps {
@@ -106,7 +107,7 @@ export default function AllocationManager({
 
   // Create allocation shells
   const activeRoomsAllocations = filteredRooms.map(room => {
-    let existing = examAllocations.find(a => a.roomId === room.id);
+    let existing = findAllocationForExamRoom(allocations, currentExam.id, room.id, rooms);
     if (!existing) {
       existing = {
         id: `${currentExam.id}_${room.id}`,

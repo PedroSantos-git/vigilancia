@@ -21,6 +21,12 @@ import {
   X
 } from 'lucide-react';
 import {
+  examIncludesRoom,
+  findAllocationForExamRoom,
+  formatExamLabel,
+  hasAssignedTeacher
+} from '../utils/allocations';
+import {
   getPeriodFromTime,
   hasNoSpecialRole,
   hasSubjectConflict,
@@ -119,10 +125,10 @@ export default function AdminDashboard({
     allocations.forEach(alloc => {
       const exam = exams.find(e => e.id === alloc.examId);
       // Only count allocations for rooms that are still associated to the exam
-      if (exam && Array.isArray(exam.roomIds) && exam.roomIds.includes(alloc.roomId)) {
-        if (alloc.invigilator1Id) rolesFilledCount++;
-        if (alloc.invigilator2Id) rolesFilledCount++;
-        if (alloc.substituteId) rolesFilledCount++;
+      if (exam && examIncludesRoom(exam, alloc.roomId)) {
+        if (hasAssignedTeacher(alloc.invigilator1Id)) rolesFilledCount++;
+        if (hasAssignedTeacher(alloc.invigilator2Id)) rolesFilledCount++;
+        if (hasAssignedTeacher(alloc.substituteId)) rolesFilledCount++;
       }
     });
   }
@@ -191,21 +197,26 @@ export default function AdminDashboard({
       const examRoomIds = Array.isArray(examObj.roomIds) ? examObj.roomIds : [];
       if (examRoomIds.length === 0) return;
 
-      const examRooms = rooms.filter(r => examRoomIds.includes(r.id));
+      const examRooms = rooms.filter(r => examRoomIds.some(id => String(id) === String(r.id)));
+      const examLabel = formatExamLabel(examObj);
+
       examRooms.forEach(roomObj => {
-        const alloc = allocations.find(a => a.examId === examObj.id && a.roomId === roomObj.id);
+        const alloc = findAllocationForExamRoom(allocations, examObj.id, roomObj.id, rooms);
 
-        if (!alloc?.invigilator1Id) {
-          conflicts.push(`Falta Vigilante 1 na ${roomObj.name} (${examObj.name}, ${examObj.date}).`);
-        }
-        if (!alloc?.invigilator2Id) {
-          conflicts.push(`Falta Vigilante 2 na ${roomObj.name} (${examObj.name}, ${examObj.date}).`);
-        }
-        if (!alloc?.substituteId) {
-          conflicts.push(`Falta Suplente na ${roomObj.name} (${examObj.name}, ${examObj.date}).`);
+        if (!alloc) {
+          conflicts.push(`Sem escala registada na ${roomObj.name} (${examLabel}).`);
+          return;
         }
 
-        if (!alloc) return;
+        if (!hasAssignedTeacher(alloc.invigilator1Id)) {
+          conflicts.push(`Falta Vigilante 1 na ${roomObj.name} (${examLabel}).`);
+        }
+        if (!hasAssignedTeacher(alloc.invigilator2Id)) {
+          conflicts.push(`Falta Vigilante 2 na ${roomObj.name} (${examLabel}).`);
+        }
+        if (!hasAssignedTeacher(alloc.substituteId)) {
+          conflicts.push(`Falta Suplente na ${roomObj.name} (${examLabel}).`);
+        }
 
         addTeacherSlotCheck(alloc.invigilator1Id, 'Vigilante 1', examObj, roomObj);
         addTeacherSlotCheck(alloc.invigilator2Id, 'Vigilante 2', examObj, roomObj);
@@ -217,7 +228,7 @@ export default function AdminDashboard({
           if (a.priority !== b.priority) return a.priority - b.priority;
           return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
         })[0];
-        const firstAlloc = allocations.find(a => a.examId === examObj.id && a.roomId === firstRoom.id);
+        const firstAlloc = findAllocationForExamRoom(allocations, examObj.id, firstRoom.id, rooms);
         if (firstAlloc) {
           const v1 = teachers.find(t => t.id === firstAlloc.invigilator1Id);
           if (firstAlloc.invigilator1Id && v1 && !v1.EE) {

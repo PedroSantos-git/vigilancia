@@ -12,12 +12,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(200).json([]);
         }
         const mappedAllocations = allocations.map(a => ({
-          ...a,
-          examId: a.exam_id,
-          roomId: a.room_id,
-          invigilator1Id: a.invigilator1_id,
-          invigilator2Id: a.invigilator2_id,
-          substituteId: a.substitute_id
+          id: a.id,
+          examId: a.exam_id ?? a.examId,
+          roomId: a.room_id ?? a.roomId,
+          invigilator1Id: a.invigilator1_id ?? a.invigilator1Id ?? null,
+          invigilator2Id: a.invigilator2_id ?? a.invigilator2Id ?? null,
+          substituteId: a.substitute_id ?? a.substituteId ?? null
         }));
         return res.status(200).json(mappedAllocations);
 
