@@ -274,7 +274,7 @@ function assignEeTeachersToExams(
     }
   }
 
-  // Passo 2: um suplente EE por exame (primeira sala), em rodízio
+  // Passo 2 (opcional): suplente EE na primeira sala, se houver docente disponível
   for (const examId of eeExamIds) {
     const firstRoom = firstRoomByExamId.get(examId);
     if (!firstRoom) continue;
@@ -285,9 +285,7 @@ function assignEeTeachersToExams(
 
     const excludeIds = new Set([alloc.invigilator1Id, alloc.invigilator2Id, alloc.substituteId]);
     const selected = pickNextEeTeacher(firstRoom.exam, firstRoom.room, alloc, excludeIds);
-    if (!selected) {
-      warnings.push(`Sem docente EE disponível para suplente no exame ${firstRoom.exam.name} (${firstRoom.exam.date}).`);
-    } else {
+    if (selected) {
       assignTeacherToSlot(
         selected,
         alloc,
@@ -526,7 +524,7 @@ export function autoAllocateAll(
   const restrictedTeachers = basePool.filter(teacher => restrictedTeacherIds.has(teacher.id));
   const genericPool = basePool.filter(teacher => !restrictedTeacherIds.has(teacher.id));
 
-  // Fase 1: EE por exame (1 vigilante EE + 1 suplente EE na primeira sala de cada exame EE)
+  // Fase 1: EE por exame (Vigilante 1 EE obrigatório na 1.ª sala; suplente EE opcional)
   assignEeTeachersToExams(
     pairs,
     eeTeachers,

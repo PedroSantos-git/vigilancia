@@ -220,18 +220,11 @@ export default function AdminDashboard({
         const firstAlloc = allocations.find(a => a.examId === examObj.id && a.roomId === firstRoom.id);
         if (firstAlloc) {
           const v1 = teachers.find(t => t.id === firstAlloc.invigilator1Id);
-          const sub = teachers.find(t => t.id === firstAlloc.substituteId);
           if (firstAlloc.invigilator1Id && v1 && !v1.EE) {
             conflicts.push(`Exame EE ${examObj.name}: Vigilante 1 na ${firstRoom.name} não é docente EE.`);
           }
-          if (firstAlloc.substituteId && sub && !sub.EE) {
-            conflicts.push(`Exame EE ${examObj.name}: Suplente na ${firstRoom.name} não é docente EE.`);
-          }
           if (!firstAlloc.invigilator1Id) {
             conflicts.push(`Exame EE ${examObj.name}: falta Vigilante 1 EE na primeira sala (${firstRoom.name}).`);
-          }
-          if (!firstAlloc.substituteId) {
-            conflicts.push(`Exame EE ${examObj.name}: falta Suplente EE na primeira sala (${firstRoom.name}).`);
           }
         }
       }
