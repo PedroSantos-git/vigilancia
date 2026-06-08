@@ -13,8 +13,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         const mappedExams = exams.map(e => ({
           ...e,
-          registrationsCount: e.registrations_count,
-          roomIds: typeof e.room_ids === 'string' ? JSON.parse(e.room_ids) : e.room_ids
+          registrationsCount: e.registrations_count ?? e.registrationsCount ?? 0,
+          EE: Boolean(e.ee ?? e.EE ?? false),
+          roomIds: typeof e.room_ids === 'string' ? JSON.parse(e.room_ids) : (e.room_ids ?? e.roomIds ?? [])
         }));
         return res.status(200).json(mappedExams);
 

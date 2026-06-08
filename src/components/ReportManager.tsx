@@ -122,8 +122,7 @@ export default function ReportManager({
         const teacherAssignments = assignmentsByTeacher.get(teacher.id) || [];
         const hasAssignments = teacherAssignments.length > 0;
         const roleNorm = String(teacher.role || '').toLowerCase().trim();
-        const hasNoSpecialRole = roleNorm === '' || roleNorm === 'professor' || roleNorm === 'teacher';
-        const isEligibleByProfile = teacher.available && hasNoSpecialRole;
+        const isEligibleByProfile = teacher.available && roleNorm === '';
 
         // Default listing: only available teachers with no special role.
         // Exception: if teacher already has assignments, always include.

@@ -17,6 +17,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           subjectGroup: t.subject_group ?? '',
           role: t.role ?? '',
           email: t.email ?? '',
+          EE: Boolean(t.ee ?? t.EE ?? false),
+          PISO_ZERO: Boolean(t.piso_zero ?? t.PISO_ZERO ?? false),
           unavailabilities: typeof t.unavailabilities === 'string' ? JSON.parse(t.unavailabilities) : (t.unavailabilities ?? [])
         }));
         return res.status(200).json(mappedTeachers);

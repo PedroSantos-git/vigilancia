@@ -20,7 +20,13 @@ import {
   FileText,
   X
 } from 'lucide-react';
-import { hasSubjectConflict } from '../utils/scheduler';
+import {
+  getPeriodFromTime,
+  hasNoSpecialRole,
+  hasSubjectConflict,
+  isFloorZero,
+  isTeacherUnavailableAt
+} from '../utils/scheduler';
 import { api } from '../utils/api';
 import * as XLSX from 'xlsx';
 
@@ -94,11 +100,7 @@ export default function AdminDashboard({
   const totalRooms = rooms.length;
   const totalExams = exams.length;
 
-  const availableTeachers = teachers.filter(t => {
-    const tRole = (t.role || "").toLowerCase();
-    const hasNoSpecialRole = tRole === "" || tRole === "professor";
-    return t.available && hasNoSpecialRole;
-  });
+  const availableTeachers = teachers.filter(t => t.available && hasNoSpecialRole(t));
   const unavailableTeachersCount = totalTeachers - availableTeachers.length;
 
   // Let's calculate coverage
@@ -129,59 +131,128 @@ export default function AdminDashboard({
     ? Math.min(Math.round((rolesFilledCount / totalRolesNeeded) * 100), 100)
     : 100;
 
-  // Find conflicts
+  // Find conflicts and coverage gaps
   const conflicts: string[] = [];
-  const assignedTwiceMap = new Map<string, Array<{ examId: string; roomId: string }>>();
+  const assignedTwiceMap = new Map<string, Array<{ examId: string; roomId: string; label: string }>>();
 
-  if (Array.isArray(allocations)) {
-    allocations.forEach(alloc => {
-      const examObj = exams.find(e => e.id === alloc.examId);
-      const roomObj = rooms.find(r => r.id === alloc.roomId);
-        
-      if (!examObj || !roomObj) return;
+  const addTeacherSlotCheck = (
+    teacherId: string | null,
+    label: string,
+    examObj: Exam,
+    roomObj: Room
+  ) => {
+    if (!teacherId) return;
+    const tchr = teachers.find(p => p.id === teacherId);
+    if (!tchr) {
+      conflicts.push(`Docente inexistente (${teacherId}) atribuído como ${label} na ${roomObj.name} (${examObj.name}).`);
+      return;
+    }
 
-      // Ignore rooms not associated to this exam if specific rooms are set up
-      if (Array.isArray(examObj.roomIds) && examObj.roomIds.length > 0 && !examObj.roomIds.includes(roomObj.id)) return;
+    if (hasSubjectConflict(tchr, examObj)) {
+      conflicts.push(
+        `${tchr.name} (${tchr.subject}) está alocado como ${label} na ${roomObj.name} para o exame de ${examObj.name}, violando o critério de compatibilidade disciplinar.`
+      );
+    }
 
-      const checkTeacherConflict = (teacherId: string | null, label: string) => {
-        if (!teacherId) return;
-        const tchr = teachers.find(p => p.id === teacherId);
-        if (!tchr) return;
+    if (!tchr.available) {
+      conflicts.push(
+        `${tchr.name} está marcado como indisponível mas foi atribuído como ${label} na ${roomObj.name} (${examObj.name}).`
+      );
+    }
 
-        // 1. Same subject
-        if (hasSubjectConflict(tchr, examObj)) {
-          conflicts.push(
-            `${tchr.name} (${tchr.subject}) está alocado como ${label} na ${roomObj.name} para o exame de ${examObj.name}, violando o critério de compatibilidade disciplinar.`
-          );
+    if (!hasNoSpecialRole(tchr)) {
+      conflicts.push(
+        `${tchr.name} tem cargo institucional e não deveria estar atribuído como ${label} na ${roomObj.name} (${examObj.name}).`
+      );
+    }
+
+    if (isTeacherUnavailableAt(tchr, examObj.date, examObj.time, examObj)) {
+      conflicts.push(
+        `${tchr.name} tem indisponibilidade registada e foi atribuído como ${label} na ${roomObj.name} (${examObj.name}, ${examObj.date}).`
+      );
+    }
+
+    if (tchr.PISO_ZERO && !isFloorZero(roomObj)) {
+      conflicts.push(
+        `${tchr.name} (Piso 0) foi atribuído à ${roomObj.name}, que não é de piso 0 (${examObj.name}).`
+      );
+    }
+
+    const period = getPeriodFromTime(examObj.time);
+    const periodKey = `${teacherId}@@${examObj.date}@@${period}`;
+    if (!assignedTwiceMap.has(periodKey)) {
+      assignedTwiceMap.set(periodKey, []);
+    }
+    assignedTwiceMap.get(periodKey)!.push({ examId: examObj.id, roomId: roomObj.id, label });
+  };
+
+  if (Array.isArray(exams)) {
+    exams.forEach(examObj => {
+      const examRoomIds = Array.isArray(examObj.roomIds) ? examObj.roomIds : [];
+      if (examRoomIds.length === 0) return;
+
+      const examRooms = rooms.filter(r => examRoomIds.includes(r.id));
+      examRooms.forEach(roomObj => {
+        const alloc = allocations.find(a => a.examId === examObj.id && a.roomId === roomObj.id);
+
+        if (!alloc?.invigilator1Id) {
+          conflicts.push(`Falta Vigilante 1 na ${roomObj.name} (${examObj.name}, ${examObj.date}).`);
+        }
+        if (!alloc?.invigilator2Id) {
+          conflicts.push(`Falta Vigilante 2 na ${roomObj.name} (${examObj.name}, ${examObj.date}).`);
+        }
+        if (!alloc?.substituteId) {
+          conflicts.push(`Falta Suplente na ${roomObj.name} (${examObj.name}, ${examObj.date}).`);
         }
 
-        // 2. Double booking on the same date (independent of hour)
-        const key = `${teacherId}_${examObj.date}`;
-        if (!assignedTwiceMap.has(key)) {
-          assignedTwiceMap.set(key, []);
-        }
-        assignedTwiceMap.get(key)!.push({ examId: examObj.id, roomId: roomObj.id });
-      };
+        if (!alloc) return;
 
-      checkTeacherConflict(alloc.invigilator1Id, 'Vigilante 1');
-      checkTeacherConflict(alloc.invigilator2Id, 'Vigilante 2');
-      checkTeacherConflict(alloc.substituteId, 'Suplente');
+        addTeacherSlotCheck(alloc.invigilator1Id, 'Vigilante 1', examObj, roomObj);
+        addTeacherSlotCheck(alloc.invigilator2Id, 'Vigilante 2', examObj, roomObj);
+        addTeacherSlotCheck(alloc.substituteId, 'Suplente', examObj, roomObj);
+      });
+
+      if (examObj.EE && examRooms.length > 0) {
+        const firstRoom = [...examRooms].sort((a, b) => {
+          if (a.priority !== b.priority) return a.priority - b.priority;
+          return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+        })[0];
+        const firstAlloc = allocations.find(a => a.examId === examObj.id && a.roomId === firstRoom.id);
+        if (firstAlloc) {
+          const v1 = teachers.find(t => t.id === firstAlloc.invigilator1Id);
+          const sub = teachers.find(t => t.id === firstAlloc.substituteId);
+          if (firstAlloc.invigilator1Id && v1 && !v1.EE) {
+            conflicts.push(`Exame EE ${examObj.name}: Vigilante 1 na ${firstRoom.name} não é docente EE.`);
+          }
+          if (firstAlloc.substituteId && sub && !sub.EE) {
+            conflicts.push(`Exame EE ${examObj.name}: Suplente na ${firstRoom.name} não é docente EE.`);
+          }
+          if (!firstAlloc.invigilator1Id) {
+            conflicts.push(`Exame EE ${examObj.name}: falta Vigilante 1 EE na primeira sala (${firstRoom.name}).`);
+          }
+          if (!firstAlloc.substituteId) {
+            conflicts.push(`Exame EE ${examObj.name}: falta Suplente EE na primeira sala (${firstRoom.name}).`);
+          }
+        }
+      }
     });
   }
 
   assignedTwiceMap.forEach((places, key) => {
-    if (places.length > 1) {
-      const teacherId = key.split('_')[0];
-      const tchr = teachers.find(p => p.id === teacherId);
-        if (tchr) {
-          conflicts.push(
-            `${tchr.name} está alocado a múltiplas funções (${places.map(p => {
-              const r = rooms.find(room => room.id === p.roomId);
-              return r ? r.name : 'Desconhecida';
-          }).join(', ')}) no mesmo dia de exame!`
-          );
-        }
-      }
+    if (places.length <= 1) return;
+    const teacherId = key.split('@@')[0];
+    const date = key.split('@@')[1];
+    const period = key.split('@@')[2];
+    const periodLabel = period === '14:00' ? 'tarde' : 'manhã';
+    const tchr = teachers.find(p => p.id === teacherId);
+    if (tchr) {
+      conflicts.push(
+        `${tchr.name} está alocado a múltiplas funções (${places.map(p => {
+          const r = rooms.find(room => room.id === p.roomId);
+          return `${p.label} em ${r ? r.name : 'Desconhecida'}`;
+        }).join(', ')}) no mesmo período (${date}, ${periodLabel})!`
+      );
+    }
   });
 
   return (
@@ -474,8 +545,8 @@ export default function AdminDashboard({
           ) : (
             <div className="text-center py-10 text-slate-400 text-xs">
               <CheckCircle className="h-8 w-8 text-blue-500 mx-auto mb-2 opacity-70" />
-              <p>Nenhum conflito disciplinar ou de horário detetado de momento!</p>
-              <p className="text-[11px] text-slate-400/80 mt-1">Todos os docentes estão compatíveis nas salas alocadas.</p>
+              <p>Nenhum conflito, indisponibilidade ou vaga em falta detetados de momento!</p>
+              <p className="text-[11px] text-slate-400/80 mt-1">Escalas completas e compatíveis com as regras de atribuição.</p>
             </div>
           )}
         </div>

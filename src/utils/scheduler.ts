@@ -22,13 +22,15 @@ const ROLE_LABEL_PT: Record<AllocationRoleKey, string> = {
   substituteId: "Suplente"
 };
 
+const ALLOCATION_ROLES: AllocationRoleKey[] = ["invigilator1Id", "invigilator2Id", "substituteId"];
+
 /**
  * Gets the period for room assignment (morning or afternoon).
  */
 export function getPeriodFromTime(time: string): "09:00" | "14:00" {
   if (!time) return "09:00";
   if (time === "09:00" || time === "14:00") return time;
-  
+
   const parts = time.split(':');
   if (parts.length > 0) {
     const hour = parseInt(parts[0], 10);
@@ -36,7 +38,7 @@ export function getPeriodFromTime(time: string): "09:00" | "14:00" {
       return hour < 12 ? "09:00" : "14:00";
     }
   }
-  
+
   const lower = time.toLowerCase();
   if (lower.includes('tarde') || lower.includes('afternoon') || lower.includes('pm')) {
     return "14:00";
@@ -62,13 +64,14 @@ export function hasSubjectConflict(teacher: Teacher, exam: Exam): boolean {
 }
 
 /**
- * Checks if a teacher has registered a personal unavailability for a specific date and time.
+ * Checks if a teacher has registered restrictions for a specific exam slot.
  */
 export function isTeacherUnavailableAt(teacher: Teacher, date: string, time: string, exam?: Exam): boolean {
-  if (!teacher.unavailabilities) return false;
+  if (!teacher.unavailabilities || teacher.unavailabilities.length === 0) return false;
   const period = getPeriodFromTime(time);
+
   return teacher.unavailabilities.some(un => {
-    if (un.date !== date && un.date !== "all") return false;
+    if (un.date !== "all" && un.date !== date) return false;
     if (un.time !== "all" && un.time !== period) return false;
     if (un.year && exam && un.year !== exam.year) return false;
     if (un.subject_group && exam && un.subject_group !== exam.subject_group) return false;
@@ -84,9 +87,13 @@ function normalizeText(value: string | null | undefined): string {
     .replace(/\s+/g, " ");
 }
 
-function hasNoSpecialRole(teacher: Teacher): boolean {
-  const role = normalizeText(teacher.role);
-  return role === "" || role === "professor" || role === "teacher";
+export function hasNoSpecialRole(teacher: Teacher): boolean {
+  return normalizeText(teacher.role) === "";
+}
+
+export function isFloorZero(room: Room): boolean {
+  const floor = normalizeText(room.floor);
+  return floor === "0" || floor === "piso 0" || floor === "rés-do-chão" || floor === "res-do-chao";
 }
 
 function randomPick<T>(list: T[]): T {
@@ -94,16 +101,26 @@ function randomPick<T>(list: T[]): T {
   return list[idx];
 }
 
+function shuffle<T>(list: T[]): T[] {
+  const copy = [...list];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
 function allocationKey(examId: string, roomId: string): string {
   return `${examId}::${roomId}`;
 }
 
-/**
- * Gets all allocation pairs sorted by date/period, with EE exams prioritized.
- */
+function getAssignmentCount(assignmentCounts: Map<string, number>, teacherId: string): number {
+  return assignmentCounts.get(teacherId) || 0;
+}
+
 function getSortedPairs(exams: Exam[], rooms: Room[]): Array<{ exam: Exam; room: Room }> {
   const roomById = new Map(rooms.map(room => [room.id, room]));
-  
+
   const sortedExams = [...exams].sort((a, b) => {
     if (a.EE !== b.EE) return a.EE ? -1 : 1;
     if (a.date !== b.date) return a.date.localeCompare(b.date);
@@ -131,6 +148,278 @@ function getSortedPairs(exams: Exam[], rooms: Room[]): Array<{ exam: Exam; room:
   return pairs;
 }
 
+function canAssignTeacherToSlot(
+  teacher: Teacher,
+  exam: Exam,
+  room: Room,
+  alloc: Allocation,
+  dayBusy: Set<string>,
+  assignmentCounts: Map<string, number>,
+  maxAssignmentsPerTeacher: number
+): boolean {
+  const period = getPeriodFromTime(exam.time);
+  const alreadyInRoom = new Set([alloc.invigilator1Id, alloc.invigilator2Id, alloc.substituteId]);
+
+  if (alreadyInRoom.has(teacher.id)) return false;
+  if (hasSubjectConflict(teacher, exam)) return false;
+  if (isTeacherUnavailableAt(teacher, exam.date, exam.time, exam)) return false;
+  if (dayBusy.has(`${teacher.id}@@${exam.date}@@${period}`)) return false;
+  if (teacher.PISO_ZERO && !isFloorZero(room)) return false;
+  if (getAssignmentCount(assignmentCounts, teacher.id) >= maxAssignmentsPerTeacher) return false;
+  return true;
+}
+
+function prioritizePisoZero(candidates: Teacher[], room: Room): Teacher[] {
+  if (!isFloorZero(room)) {
+    return candidates.filter(teacher => !teacher.PISO_ZERO);
+  }
+  const pisoZeroCandidates = candidates.filter(teacher => teacher.PISO_ZERO);
+  return pisoZeroCandidates.length > 0 ? pisoZeroCandidates : candidates;
+}
+
+function pickLeastUsedRandom(candidates: Teacher[], assignmentCounts: Map<string, number>): Teacher | null {
+  if (candidates.length === 0) return null;
+  const minCount = Math.min(...candidates.map(teacher => getAssignmentCount(assignmentCounts, teacher.id)));
+  const leastUsed = candidates.filter(teacher => getAssignmentCount(assignmentCounts, teacher.id) === minCount);
+  return randomPick(leastUsed);
+}
+
+function assignTeacherToSlot(
+  teacher: Teacher,
+  alloc: Allocation,
+  role: AllocationRoleKey,
+  exam: Exam,
+  room: Room,
+  dayBusy: Set<string>,
+  assignmentCounts: Map<string, number>,
+  notifications: Array<{ teacherId: string; message: string }>,
+  labelSuffix = ""
+): void {
+  alloc[role] = teacher.id;
+  const period = getPeriodFromTime(exam.time);
+  dayBusy.add(`${teacher.id}@@${exam.date}@@${period}`);
+  assignmentCounts.set(teacher.id, getAssignmentCount(assignmentCounts, teacher.id) + 1);
+  notifications.push({
+    teacherId: teacher.id,
+    message: `${ROLE_LABEL_PT[role]}${labelSuffix} em ${room.name} - ${exam.name} (${exam.date}).`
+  });
+}
+
+function assignEeTeachersToExams(
+  pairs: Array<{ exam: Exam; room: Room }>,
+  eeTeachers: Teacher[],
+  targetAllocationByKey: Map<string, Allocation>,
+  dayBusy: Set<string>,
+  assignmentCounts: Map<string, number>,
+  maxAssignmentsPerTeacher: number,
+  warnings: string[],
+  notifications: Array<{ teacherId: string; message: string }>
+): void {
+  const eeExamIds = [...new Set(pairs.filter(pair => pair.exam.EE).map(pair => pair.exam.id))];
+  if (eeExamIds.length === 0 || eeTeachers.length === 0) return;
+
+  let eeTeacherCursor = 0;
+
+  const pickNextEeTeacher = (
+    exam: Exam,
+    room: Room,
+    alloc: Allocation,
+    excludeIds: Set<string | null>
+  ): Teacher | null => {
+    const pool = prioritizePisoZero(eeTeachers, room);
+    for (let attempt = 0; attempt < pool.length; attempt++) {
+      const teacher = pool[(eeTeacherCursor + attempt) % pool.length];
+      if (excludeIds.has(teacher.id)) continue;
+      if (!canAssignTeacherToSlot(teacher, exam, room, alloc, dayBusy, assignmentCounts, maxAssignmentsPerTeacher)) {
+        continue;
+      }
+      eeTeacherCursor = (eeTeacherCursor + attempt + 1) % pool.length;
+      return teacher;
+    }
+    return null;
+  };
+
+  const firstRoomByExamId = new Map<string, { exam: Exam; room: Room }>();
+  for (const examId of eeExamIds) {
+    const firstRoomPair = pairs.find(pair => pair.exam.id === examId);
+    if (firstRoomPair) {
+      firstRoomByExamId.set(examId, { exam: firstRoomPair.exam, room: firstRoomPair.room });
+    }
+  }
+
+  // Passo 1: um vigilante EE por exame (primeira sala), em rodízio entre docentes EE
+  for (const examId of eeExamIds) {
+    const firstRoom = firstRoomByExamId.get(examId);
+    if (!firstRoom) continue;
+
+    const key = allocationKey(examId, firstRoom.room.id);
+    const alloc = targetAllocationByKey.get(key);
+    if (!alloc || alloc.invigilator1Id) continue;
+
+    const selected = pickNextEeTeacher(firstRoom.exam, firstRoom.room, alloc, new Set());
+    if (!selected) {
+      warnings.push(`Sem docente EE disponível para vigilância no exame ${firstRoom.exam.name} (${firstRoom.exam.date}).`);
+    } else {
+      assignTeacherToSlot(
+        selected,
+        alloc,
+        "invigilator1Id",
+        firstRoom.exam,
+        firstRoom.room,
+        dayBusy,
+        assignmentCounts,
+        notifications,
+        " (EE)"
+      );
+    }
+  }
+
+  // Passo 2: um suplente EE por exame (primeira sala), em rodízio
+  for (const examId of eeExamIds) {
+    const firstRoom = firstRoomByExamId.get(examId);
+    if (!firstRoom) continue;
+
+    const key = allocationKey(examId, firstRoom.room.id);
+    const alloc = targetAllocationByKey.get(key);
+    if (!alloc || alloc.substituteId) continue;
+
+    const excludeIds = new Set([alloc.invigilator1Id, alloc.invigilator2Id, alloc.substituteId]);
+    const selected = pickNextEeTeacher(firstRoom.exam, firstRoom.room, alloc, excludeIds);
+    if (!selected) {
+      warnings.push(`Sem docente EE disponível para suplente no exame ${firstRoom.exam.name} (${firstRoom.exam.date}).`);
+    } else {
+      assignTeacherToSlot(
+        selected,
+        alloc,
+        "substituteId",
+        firstRoom.exam,
+        firstRoom.room,
+        dayBusy,
+        assignmentCounts,
+        notifications,
+        " (EE)"
+      );
+    }
+  }
+}
+
+function assignRestrictedTeachers(
+  pairs: Array<{ exam: Exam; room: Room }>,
+  restrictedTeachers: Teacher[],
+  targetAllocationByKey: Map<string, Allocation>,
+  dayBusy: Set<string>,
+  assignmentCounts: Map<string, number>,
+  maxAssignmentsPerTeacher: number,
+  notifications: Array<{ teacherId: string; message: string }>
+): void {
+  for (const teacher of restrictedTeachers) {
+    const remainingSlots = maxAssignmentsPerTeacher - getAssignmentCount(assignmentCounts, teacher.id);
+    if (remainingSlots <= 0) continue;
+
+    let assignmentsDone = 0;
+    let roleIndex = 0;
+    let safetyCounter = 0;
+    const maxSafety = pairs.length * ALLOCATION_ROLES.length * 4;
+
+    while (assignmentsDone < remainingSlots && safetyCounter < maxSafety) {
+      safetyCounter++;
+      const currentRole = ALLOCATION_ROLES[roleIndex % ALLOCATION_ROLES.length];
+      const candidatePairs = shuffle(pairs).filter(pair => {
+        const alloc = targetAllocationByKey.get(allocationKey(pair.exam.id, pair.room.id));
+        if (!alloc || alloc[currentRole]) return false;
+        return canAssignTeacherToSlot(
+          teacher,
+          pair.exam,
+          pair.room,
+          alloc,
+          dayBusy,
+          assignmentCounts,
+          maxAssignmentsPerTeacher
+        );
+      });
+
+      if (candidatePairs.length === 0) {
+        roleIndex++;
+        continue;
+      }
+
+      const pair = randomPick(candidatePairs);
+      const alloc = targetAllocationByKey.get(allocationKey(pair.exam.id, pair.room.id))!;
+      assignTeacherToSlot(
+        teacher,
+        alloc,
+        currentRole,
+        pair.exam,
+        pair.room,
+        dayBusy,
+        assignmentCounts,
+        notifications
+      );
+      assignmentsDone++;
+      roleIndex++;
+    }
+  }
+}
+
+function assignGenericTeachers(
+  pairs: Array<{ exam: Exam; room: Room }>,
+  genericPool: Teacher[],
+  targetAllocationByKey: Map<string, Allocation>,
+  dayBusy: Set<string>,
+  assignmentCounts: Map<string, number>,
+  maxAssignmentsPerTeacher: number,
+  warnings: string[],
+  notifications: Array<{ teacherId: string; message: string }>
+): void {
+  for (const role of ALLOCATION_ROLES) {
+    let usedInRound = new Set<string>();
+
+    for (const pair of pairs) {
+      const key = allocationKey(pair.exam.id, pair.room.id);
+      const alloc = targetAllocationByKey.get(key);
+      if (!alloc || alloc[role]) continue;
+
+      let candidates = genericPool.filter(teacher =>
+        canAssignTeacherToSlot(
+          teacher,
+          pair.exam,
+          pair.room,
+          alloc,
+          dayBusy,
+          assignmentCounts,
+          maxAssignmentsPerTeacher
+        )
+      );
+
+      candidates = prioritizePisoZero(candidates, pair.room);
+
+      let pool = candidates.filter(teacher => !usedInRound.has(teacher.id));
+      if (pool.length === 0) {
+        usedInRound = new Set<string>();
+        pool = candidates;
+      }
+
+      const selected = pickLeastUsedRandom(pool, assignmentCounts);
+      if (!selected) {
+        warnings.push(`Sem docente elegível para ${ROLE_LABEL_PT[role]} em ${pair.room.name} (${pair.exam.name}, ${pair.exam.date}).`);
+        continue;
+      }
+
+      assignTeacherToSlot(
+        selected,
+        alloc,
+        role,
+        pair.exam,
+        pair.room,
+        dayBusy,
+        assignmentCounts,
+        notifications
+      );
+      usedInRound.add(selected.id);
+    }
+  }
+}
+
 /**
  * Runs the auto-distribution of rooms for all exams.
  */
@@ -139,11 +428,11 @@ export function autoAllocateRooms(
   rooms: Room[]
 ): Exam[] {
   const sortedRooms = [...rooms].sort((a, b) => a.priority - b.priority);
-  
+
   const sortedExams = [...exams].sort((a, b) => {
     const isSpecialA = (a.variant || "").includes("LNM") || (a.modality && a.modality !== "");
     const isSpecialB = (b.variant || "").includes("LNM") || (b.modality && b.modality !== "");
-    
+
     if (isSpecialA !== isSpecialB) return isSpecialA ? 1 : -1;
     if (a.date !== b.date) return a.date.localeCompare(b.date);
     return a.time.localeCompare(b.time);
@@ -154,10 +443,10 @@ export function autoAllocateRooms(
   sortedExams.forEach(exam => {
     const registrationsNeeded = exam.registrationsCount || 0;
     const currentRooms = exam.roomIds || [];
-    
+
     const roomById = new Map(rooms.map(room => [room.id, room]));
     let currentCapacity = currentRooms.reduce((sum, roomId) => sum + (roomById.get(roomId)?.capacity || 0), 0);
-    
+
     if (currentCapacity >= registrationsNeeded) return;
 
     const roomsToAssign: string[] = [...currentRooms];
@@ -196,8 +485,6 @@ export function autoAllocateAll(
   rooms: Room[],
   teachers: Teacher[]
 ): AllocationResult {
-  const examById = new Map(exams.map(exam => [exam.id, exam]));
-  const roomById = new Map(rooms.map(room => [room.id, room]));
   const pairs = getSortedPairs(exams, rooms);
   const targetAllocationByKey = new Map<string, Allocation>();
   const warnings: string[] = [];
@@ -205,11 +492,9 @@ export function autoAllocateAll(
   const dayBusy = new Set<string>();
   const assignmentCounts = new Map<string, number>();
 
-  // Initialize base pool
-  const basePool = teachers.filter(t => t.available && hasNoSpecialRole(t));
+  const basePool = teachers.filter(teacher => teacher.available && hasNoSpecialRole(teacher));
   basePool.forEach(teacher => assignmentCounts.set(teacher.id, 0));
 
-  // Initialize all allocations
   for (const pair of pairs) {
     const key = allocationKey(pair.exam.id, pair.room.id);
     targetAllocationByKey.set(key, {
@@ -222,231 +507,59 @@ export function autoAllocateAll(
     });
   }
 
-  // Calculate total assignments and max per teacher
-  const totalRooms = pairs.length;
-  const totalAssignmentsNeeded = totalRooms * 3;
-  const availableTeachersCount = basePool.length;
+  const totalAssignmentsNeeded = pairs.length * 3;
+  const availableTeachersCount = Math.max(basePool.length, 1);
   const maxAssignmentsPerTeacher = Math.ceil(totalAssignmentsNeeded / availableTeachersCount);
-  warnings.push(`Máximo de vigilâncias por docente: ${maxAssignmentsPerTeacher} (total de ${totalAssignmentsNeeded} para ${availableTeachersCount} docentes)`);
+  warnings.push(
+    `Máximo de vigilâncias por docente: ${maxAssignmentsPerTeacher} (${totalAssignmentsNeeded} vagas para ${basePool.length} docentes elegíveis).`
+  );
 
-  // Split teachers into groups
-  const eeTeachers = basePool.filter(t => t.EE);
-  const nonEeTeachers = basePool.filter(t => !t.EE);
-  const pisoZeroTeachers = basePool.filter(t => t.PISO_ZERO);
-  const teachersWithUnavailabilities = basePool.filter(t => t.unavailabilities && t.unavailabilities.length > 0);
+  const eeTeachers = basePool
+    .filter(teacher => teacher.EE)
+    .sort((a, b) => getAssignmentCount(assignmentCounts, a.id) - getAssignmentCount(assignmentCounts, b.id));
 
-  // Step 1: Assign at least one EE teacher per EE exam (Vigilante 1 or Suplente)
-  const eeExams = pairs.filter(p => p.exam.EE);
-  const uniqueEeExams = new Map<string, Exam>();
-  eeExams.forEach(p => uniqueEeExams.set(p.exam.id, p.exam));
-  
-  // Assign Vigilante 1 EE for each EE exam's first room
-  for (const [examId, exam] of uniqueEeExams) {
-    const firstRoomForExam = pairs.find(p => p.exam.id === examId);
-    if (!firstRoomForExam) continue;
-    
-    const key = allocationKey(examId, firstRoomForExam.room.id);
-    const alloc = targetAllocationByKey.get(key);
-    if (!alloc || alloc.invigilator1Id) continue;
+  const restrictedTeacherIds = new Set(
+    basePool
+      .filter(teacher => teacher.unavailabilities && teacher.unavailabilities.length > 0)
+      .map(teacher => teacher.id)
+  );
+  const restrictedTeachers = basePool.filter(teacher => restrictedTeacherIds.has(teacher.id));
+  const genericPool = basePool.filter(teacher => !restrictedTeacherIds.has(teacher.id));
 
-    const currentPeriod = getPeriodFromTime(exam.time);
-    const candidates = pisoZeroTeachers.length > 0 
-      ? eeTeachers.filter(t => {
-          if (t.PISO_ZERO && firstRoomForExam.room.floor !== "0") return false;
-          return true;
-        })
-      : eeTeachers;
-    
-    const availableCandidates = candidates.filter(teacher => {
-      if (hasSubjectConflict(teacher, exam)) return false;
-      if (isTeacherUnavailableAt(teacher, exam.date, exam.time, exam)) return false;
-      if (dayBusy.has(`${teacher.id}@@${exam.date}@@${currentPeriod}`)) return false;
-      if (assignmentCounts.get(teacher.id)! >= maxAssignmentsPerTeacher) return false;
-      return true;
-    });
+  // Fase 1: EE por exame (1 vigilante EE + 1 suplente EE na primeira sala de cada exame EE)
+  assignEeTeachersToExams(
+    pairs,
+    eeTeachers,
+    targetAllocationByKey,
+    dayBusy,
+    assignmentCounts,
+    maxAssignmentsPerTeacher,
+    warnings,
+    notifications
+  );
 
-    if (availableCandidates.length === 0) {
-      warnings.push(`Sem docente EE disponível para exame ${exam.name} (${exam.date})`);
-      continue;
-    }
+  // Fase 2: docentes com indisponibilidades/restrições
+  assignRestrictedTeachers(
+    pairs,
+    restrictedTeachers,
+    targetAllocationByKey,
+    dayBusy,
+    assignmentCounts,
+    maxAssignmentsPerTeacher,
+    notifications
+  );
 
-    const selected = randomPick(availableCandidates);
-    alloc.invigilator1Id = selected.id;
-    dayBusy.add(`${selected.id}@@${exam.date}@@${currentPeriod}`);
-    assignmentCounts.set(selected.id, assignmentCounts.get(selected.id)! + 1);
-    notifications.push({
-      teacherId: selected.id,
-      message: `Vigilante 1 (EE) em ${firstRoomForExam.room.name} - ${exam.name} (${exam.date}).`
-    });
-  }
-
-  // Assign Substitute EE for each EE exam
-  for (const [examId, exam] of uniqueEeExams) {
-    const firstRoomForExam = pairs.find(p => p.exam.id === examId);
-    if (!firstRoomForExam) continue;
-    
-    const key = allocationKey(examId, firstRoomForExam.room.id);
-    const alloc = targetAllocationByKey.get(key);
-    if (!alloc || alloc.substituteId) continue;
-
-    const currentPeriod = getPeriodFromTime(exam.time);
-    const candidates = pisoZeroTeachers.length > 0 
-      ? eeTeachers.filter(t => {
-          if (t.PISO_ZERO && firstRoomForExam.room.floor !== "0") return false;
-          return true;
-        })
-      : eeTeachers;
-    
-    const alreadyAssigned = new Set([alloc.invigilator1Id]);
-    const availableCandidates = candidates.filter(teacher => {
-      if (alreadyAssigned.has(teacher.id)) return false;
-      if (hasSubjectConflict(teacher, exam)) return false;
-      if (isTeacherUnavailableAt(teacher, exam.date, exam.time, exam)) return false;
-      if (dayBusy.has(`${teacher.id}@@${exam.date}@@${currentPeriod}`)) return false;
-      if (assignmentCounts.get(teacher.id)! >= maxAssignmentsPerTeacher) return false;
-      return true;
-    });
-
-    if (availableCandidates.length === 0) {
-      warnings.push(`Sem docente EE disponível para suplente no exame ${exam.name} (${exam.date})`);
-      continue;
-    }
-
-    const selected = randomPick(availableCandidates);
-    alloc.substituteId = selected.id;
-    dayBusy.add(`${selected.id}@@${exam.date}@@${currentPeriod}`);
-    assignmentCounts.set(selected.id, assignmentCounts.get(selected.id)! + 1);
-    notifications.push({
-      teacherId: selected.id,
-      message: `Suplente (EE) em ${firstRoomForExam.room.name} - ${exam.name} (${exam.date}).`
-    });
-  }
-
-  // Step 2: Assign teachers with unavailabilities first
-  const roles: AllocationRoleKey[] = ["invigilator1Id", "invigilator2Id", "substituteId"];
-  for (const teacher of teachersWithUnavailabilities) {
-    let currentRoleIndex = 0;
-    let assignmentsDone = 0;
-    let assignmentsToDo = maxAssignmentsPerTeacher - (assignmentCounts.get(teacher.id) || 0);
-    
-    if (assignmentsToDo <= 0) continue;
-
-    const shuffledPairs = [...pairs].sort(() => Math.random() - 0.5);
-    
-    for (const pair of shuffledPairs) {
-      if (assignmentsDone >= assignmentsToDo) break;
-
-      const key = allocationKey(pair.exam.id, pair.room.id);
-      const alloc = targetAllocationByKey.get(key)!;
-      const currentRole = roles[currentRoleIndex % roles.length];
-      
-      if (alloc[currentRole]) {
-        currentRoleIndex++;
-        continue;
-      }
-
-      const alreadyAssigned = new Set([alloc.invigilator1Id, alloc.invigilator2Id, alloc.substituteId]);
-      const currentPeriod = getPeriodFromTime(pair.exam.time);
-
-      if (alreadyAssigned.has(teacher.id)) {
-        currentRoleIndex++;
-        continue;
-      }
-      if (hasSubjectConflict(teacher, pair.exam)) {
-        currentRoleIndex++;
-        continue;
-      }
-      if (isTeacherUnavailableAt(teacher, pair.exam.date, pair.exam.time, pair.exam)) {
-        currentRoleIndex++;
-        continue;
-      }
-      if (dayBusy.has(`${teacher.id}@@${pair.exam.date}@@${currentPeriod}`)) {
-        currentRoleIndex++;
-        continue;
-      }
-      if (teacher.PISO_ZERO && pair.room.floor !== "0") {
-        currentRoleIndex++;
-        continue;
-      }
-      if (assignmentCounts.get(teacher.id)! >= maxAssignmentsPerTeacher) {
-        break;
-      }
-
-      // Assign the teacher
-      alloc[currentRole] = teacher.id;
-      dayBusy.add(`${teacher.id}@@${pair.exam.date}@@${currentPeriod}`);
-      assignmentCounts.set(teacher.id, assignmentCounts.get(teacher.id)! + 1);
-      assignmentsDone++;
-      currentRoleIndex++;
-      notifications.push({
-        teacherId: teacher.id,
-        message: `${ROLE_LABEL_PT[currentRole]} em ${pair.room.name} - ${pair.exam.name} (${pair.exam.date}).`
-      });
-    }
-  }
-
-  // Step 3: Generic assignment for remaining slots
-  // First, all Invigilator 1, then all Invigilator 2, then all Substitute
-  for (const role of roles) {
-    const remainingTeachers = new Set(basePool.map(t => t.id));
-    
-    // Keep track of used teachers in this round to ensure fair distribution
-    let usedInRound = new Set<string>();
-    
-    for (const pair of pairs) {
-      const key = allocationKey(pair.exam.id, pair.room.id);
-      const alloc = targetAllocationByKey.get(key)!;
-      if (alloc[role]) continue;
-
-      const alreadyAssigned = new Set([alloc.invigilator1Id, alloc.invigilator2Id, alloc.substituteId]);
-      const currentPeriod = getPeriodFromTime(pair.exam.time);
-      
-      let candidates = basePool.filter(teacher => {
-        if (alreadyAssigned.has(teacher.id)) return false;
-        if (hasSubjectConflict(teacher, pair.exam)) return false;
-        if (isTeacherUnavailableAt(teacher, pair.exam.date, pair.exam.time, pair.exam)) return false;
-        if (dayBusy.has(`${teacher.id}@@${pair.exam.date}@@${currentPeriod}`)) return false;
-        if (teacher.PISO_ZERO && pair.room.floor !== "0") return false;
-        if (assignmentCounts.get(teacher.id)! >= maxAssignmentsPerTeacher) return false;
-        return true;
-      });
-
-      // First prioritize PISO_ZERO teachers if applicable
-      if (pair.room.floor === "0" && candidates.some(t => t.PISO_ZERO)) {
-        candidates = candidates.filter(t => t.PISO_ZERO);
-      }
-
-      // Prioritize teachers not yet used in this round
-      let finalCandidates = candidates.filter(t => !usedInRound.has(t.id));
-      if (finalCandidates.length === 0) {
-        // Reset used teachers if all are used
-        usedInRound = new Set<string>();
-        finalCandidates = candidates;
-      }
-
-      if (finalCandidates.length === 0) {
-        warnings.push(`Sem docente elegível para ${ROLE_LABEL_PT[role]} em ${pair.room.name} (${pair.exam.name}, ${pair.exam.date}).`);
-        continue;
-      }
-
-      // Select teacher with least assignments so far
-      finalCandidates.sort((a, b) => {
-        const countA = assignmentCounts.get(a.id)!;
-        const countB = assignmentCounts.get(b.id)!;
-        return countA - countB;
-      });
-
-      const selected = finalCandidates[0];
-      alloc[role] = selected.id;
-      dayBusy.add(`${selected.id}@@${pair.exam.date}@@${currentPeriod}`);
-      assignmentCounts.set(selected.id, assignmentCounts.get(selected.id)! + 1);
-      usedInRound.add(selected.id);
-      notifications.push({
-        teacherId: selected.id,
-        message: `${ROLE_LABEL_PT[role]} em ${pair.room.name} - ${pair.exam.name} (${pair.exam.date}).`
-      });
-    }
-  }
+  // Fase 3: atribuição genérica (Vigilante 1 -> Vigilante 2 -> Suplente)
+  assignGenericTeachers(
+    pairs,
+    genericPool,
+    targetAllocationByKey,
+    dayBusy,
+    assignmentCounts,
+    maxAssignmentsPerTeacher,
+    warnings,
+    notifications
+  );
 
   return {
     allocations: pairs
@@ -468,13 +581,12 @@ export function autoAllocate(
   currentExamAllocations: Allocation[],
   allExams: Exam[]
 ): AllocationResult {
-  const roomById = new Map(rooms.map(room => [room.id, room]));
   const pairs = getSortedPairs([exam], rooms);
   const targetAllocationByKey = new Map<string, Allocation>();
   const warnings: string[] = [];
   const notifications: Array<{ teacherId: string; message: string }> = [];
   const examById = new Map(allExams.map(e => [e.id, e]));
-  
+
   const dayBusy = new Set<string>();
   allAllocations.forEach(alloc => {
     const ex = examById.get(alloc.examId);
@@ -498,16 +610,17 @@ export function autoAllocate(
     }
   });
 
-  const basePool = teachers.filter(t => t.available && hasNoSpecialRole(t));
+  const basePool = teachers.filter(teacher => teacher.available && hasNoSpecialRole(teacher));
   basePool.forEach(teacher => {
     if (!assignmentCounts.has(teacher.id)) {
       assignmentCounts.set(teacher.id, 0);
     }
   });
 
+  let assignedCount = 0;
   for (const pair of pairs) {
-    const key = allocationKey(pair.exam.id, pair.room.id);
     const existingAlloc = currentExamAllocations.find(a => a.roomId === pair.room.id);
+    const key = allocationKey(pair.exam.id, pair.room.id);
     targetAllocationByKey.set(key, {
       id: `${pair.exam.id}_${pair.room.id}`,
       examId: pair.exam.id,
@@ -516,82 +629,52 @@ export function autoAllocate(
       invigilator2Id: existingAlloc?.invigilator2Id || null,
       substituteId: existingAlloc?.substituteId || null
     });
-  }
-
-  for (const pair of pairs) {
-    const key = allocationKey(pair.exam.id, pair.room.id);
-    const alloc = targetAllocationByKey.get(key)!;
-    const currentPeriod = getPeriodFromTime(pair.exam.time);
-    const alreadyAssigned = new Set([alloc.invigilator1Id, alloc.invigilator2Id, alloc.substituteId]);
-    alreadyAssigned.forEach(id => {
-      if (id) dayBusy.add(`${id}@@${pair.exam.date}@@${currentPeriod}`);
-    });
-  }
-
-  // Calculate max assignments (rough estimation for single exam)
-  let totalRooms = pairs.length;
-  let assignedCount = 0;
-  for (const pair of pairs) {
-    const key = allocationKey(pair.exam.id, pair.room.id);
     const alloc = targetAllocationByKey.get(key)!;
     if (alloc.invigilator1Id) assignedCount++;
     if (alloc.invigilator2Id) assignedCount++;
     if (alloc.substituteId) assignedCount++;
   }
-  const remainingSlots = (totalRooms * 3) - assignedCount;
-  const availableTeachersCount = basePool.length;
-  const maxAssignmentsPerTeacher = Math.ceil(remainingSlots / availableTeachersCount) + (Math.max(...Array.from(assignmentCounts.values())) || 0);
 
-  // Now fill remaining roles for this exam
-  const roles: AllocationRoleKey[] = ["invigilator1Id", "invigilator2Id", "substituteId"];
-  for (const role of roles) {
-    for (const pair of pairs) {
-      const key = allocationKey(pair.exam.id, pair.room.id);
-      const alloc = targetAllocationByKey.get(key)!;
-      if (alloc[role]) continue;
+  const remainingSlots = (pairs.length * 3) - assignedCount;
+  const maxAssignmentsPerTeacher =
+    Math.ceil(remainingSlots / Math.max(basePool.length, 1)) +
+    Math.max(0, ...Array.from(assignmentCounts.values()));
 
-      const alreadyAssigned = new Set([alloc.invigilator1Id, alloc.invigilator2Id, alloc.substituteId]);
-      const currentPeriod = getPeriodFromTime(pair.exam.time);
+  const eeTeachers = basePool.filter(teacher => teacher.EE);
+  const restrictedTeachers = basePool.filter(teacher => teacher.unavailabilities && teacher.unavailabilities.length > 0);
+  const genericPool = basePool.filter(teacher => !restrictedTeachers.some(t => t.id === teacher.id));
 
-      let candidates = basePool.filter(teacher => {
-        if (alreadyAssigned.has(teacher.id)) return false;
-        if (hasSubjectConflict(teacher, pair.exam)) return false;
-        if (isTeacherUnavailableAt(teacher, pair.exam.date, pair.exam.time, pair.exam)) return false;
-        if (dayBusy.has(`${teacher.id}@@${pair.exam.date}@@${currentPeriod}`)) return false;
-        if (teacher.PISO_ZERO && pair.room.floor !== "0") return false;
-        if (assignmentCounts.get(teacher.id)! >= maxAssignmentsPerTeacher) return false;
-        return true;
-      });
+  assignEeTeachersToExams(
+    pairs,
+    eeTeachers,
+    targetAllocationByKey,
+    dayBusy,
+    assignmentCounts,
+    maxAssignmentsPerTeacher,
+    warnings,
+    notifications
+  );
 
-      // If exam needs EE and we're on Vigilante 1 and not yet filled, prioritize EE teachers
-      if (pair.exam.EE && role === "invigilator1Id") {
-        const eeCandidates = candidates.filter(t => t.EE);
-        if (eeCandidates.length > 0) {
-          candidates = eeCandidates;
-        }
-      }
+  assignRestrictedTeachers(
+    pairs,
+    restrictedTeachers,
+    targetAllocationByKey,
+    dayBusy,
+    assignmentCounts,
+    maxAssignmentsPerTeacher,
+    notifications
+  );
 
-      if (candidates.length === 0) {
-        warnings.push(`Sem docente elegível para ${ROLE_LABEL_PT[role]} em ${pair.room.name} (${pair.exam.name}, ${pair.exam.date}).`);
-        continue;
-      }
-
-      candidates.sort((a, b) => {
-        const countA = assignmentCounts.get(a.id)!;
-        const countB = assignmentCounts.get(b.id)!;
-        return countA - countB;
-      });
-
-      const selected = candidates[0];
-      alloc[role] = selected.id;
-      dayBusy.add(`${selected.id}@@${pair.exam.date}@@${currentPeriod}`);
-      assignmentCounts.set(selected.id, assignmentCounts.get(selected.id)! + 1);
-      notifications.push({
-        teacherId: selected.id,
-        message: `${ROLE_LABEL_PT[role]} em ${pair.room.name} - ${pair.exam.name} (${pair.exam.date}).`
-      });
-    }
-  }
+  assignGenericTeachers(
+    pairs,
+    genericPool,
+    targetAllocationByKey,
+    dayBusy,
+    assignmentCounts,
+    maxAssignmentsPerTeacher,
+    warnings,
+    notifications
+  );
 
   return {
     allocations: pairs

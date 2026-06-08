@@ -20,7 +20,7 @@ import {
   Home,
   Layers
 } from 'lucide-react';
-import { hasSubjectConflict, isTeacherUnavailableAt } from '../utils/scheduler';
+import { getPeriodFromTime, hasSubjectConflict, isTeacherUnavailableAt } from '../utils/scheduler';
 
 interface AllocationManagerProps {
   lang: Language;
@@ -126,18 +126,17 @@ export default function AllocationManager({
   // Check if a teacher is busy elsewhere on the same day (excluding current exam/room)
   const isTeacherBusyElsewhere = (teacherId: string, currentAllocId: string): boolean => {
     if (!Array.isArray(allocations)) return false;
+    const currentPeriod = getPeriodFromTime(currentExam.time);
     return allocations.some(alloc => {
       if (alloc.id === currentAllocId) return false;
       const ex = exams.find(e => e.id === alloc.examId);
-      if (!ex) return false;
-      if (ex.date === currentExam.date) {
-        return (
-          alloc.invigilator1Id === teacherId ||
-          alloc.invigilator2Id === teacherId ||
-          alloc.substituteId === teacherId
-        );
-      }
-      return false;
+      if (!ex || ex.date !== currentExam.date) return false;
+      if (getPeriodFromTime(ex.time) !== currentPeriod) return false;
+      return (
+        alloc.invigilator1Id === teacherId ||
+        alloc.invigilator2Id === teacherId ||
+        alloc.substituteId === teacherId
+      );
     });
   };
 
@@ -150,7 +149,7 @@ export default function AllocationManager({
     const teacher = teachers.find(tchr => tchr.id === teacherId);
     if (!teacher) return { state: 'notfound', label: 'Inexistente', color: 'text-slate-400' };
 
-    const isUnavailable = !teacher.available || isTeacherUnavailableAt(teacher, currentExam.date, currentExam.time);
+    const isUnavailable = !teacher.available || isTeacherUnavailableAt(teacher, currentExam.date, currentExam.time, currentExam);
     if (isUnavailable) {
       return {
         state: 'critical',
@@ -390,7 +389,7 @@ export default function AllocationManager({
                         (roleKey !== 'invigilator2Id' && allocation.invigilator2Id === tchr.id) ||
                         (roleKey !== 'substituteId' && allocation.substituteId === tchr.id);
                       if (isAssignedElsewhereInRoom) return false;
-                      if (!tchr.available || isTeacherUnavailableAt(tchr, currentExam.date, currentExam.time)) return false;
+                      if (!tchr.available || isTeacherUnavailableAt(tchr, currentExam.date, currentExam.time, currentExam)) return false;
                       if (hideBusy && isTeacherBusyElsewhere(tchr.id, allocation.id)) return false;
                       if (hideIncompatible && hasSubjectConflict(tchr, currentExam)) return false;
                       return true;

@@ -384,7 +384,7 @@ export default function App() {
     }
 
     try {
-      pushOperationLog(lang === 'pt' ? 'A gerar plano global por fases (Vigilante 1 -> Vigilante 2 -> Suplente)...' : 'Building global phased plan (Invigilator 1 -> Invigilator 2 -> Substitute)...');
+      pushOperationLog(lang === 'pt' ? 'A gerar plano global (EE -> Restrições -> Atribuição genérica)...' : 'Building global plan (EE -> Restrictions -> Generic assignment)...');
       setOperationProgress(20);
       await waitForUiTick();
 
