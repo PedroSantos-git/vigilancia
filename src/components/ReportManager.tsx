@@ -33,22 +33,30 @@ export default function ReportManager({
 
   const formatExamIdentity = (exam: Exam) => {
     if (lang === 'pt') {
-      const parts: string[] = [exam.name];
-      if (exam.code) parts.push(exam.code);
-      parts.push(`${exam.year}º`);
-      if (exam.shift) parts.push(exam.shift);
-      if (exam.modality) parts.push(exam.modality);
-      parts.push(`${exam.phase}ª Fase`);
-      return parts.join(' | ');
+      return [
+        `Exame: ${exam.name}`,
+        `Data: ${exam.date}`,
+        `Hora: ${exam.time}`,
+        `Ano: ${exam.year}º`,
+        `Código: ${exam.code || '-'}`,
+        `Turno: ${exam.shift || '-'}`,
+        `Modalidade: ${exam.modality || '-'}`,
+        `Fase: ${exam.phase}`,
+        `Variante: ${exam.variant || '-'}`
+      ].join(' | ');
     }
 
-    const parts: string[] = [exam.name];
-    if (exam.code) parts.push(exam.code);
-    parts.push(exam.year);
-    if (exam.shift) parts.push(exam.shift);
-    if (exam.modality) parts.push(exam.modality);
-    parts.push(`${exam.phase}st Phase`);
-    return parts.join(' | ');
+    return [
+      `Exam: ${exam.name}`,
+      `Date: ${exam.date}`,
+      `Time: ${exam.time}`,
+      `Year: ${exam.year}`,
+      `Code: ${exam.code || '-'}`,
+      `Shift: ${exam.shift || '-'}`,
+      `Modality: ${exam.modality || '-'}`,
+      `Phase: ${exam.phase}`,
+      `Variant: ${exam.variant || '-'}`
+    ].join(' | ');
   };
 
   const getRoleLabel = (role: 'invigilator1' | 'invigilator2' | 'substitute') => {
@@ -103,9 +111,9 @@ export default function ReportManager({
 
     const headers = [[
       lang === 'pt' ? 'Nome' : 'Name',
-      lang === 'pt' ? 'Grupo / Disciplina' : 'Group / Subject',
+      lang === 'pt' ? 'Grupo' : 'Group',
       lang === 'pt' ? 'Total' : 'Total',
-      lang === 'pt' ? 'Exame' : 'Exam'
+      lang === 'pt' ? 'Atribuições (Exame/Data/Hora/Sala/Função)' : 'Assignments (Exam/Date/Time/Room/Role)'
     ]];
 
     const data: string[][] = [];
@@ -133,7 +141,7 @@ export default function ReportManager({
       if (teacherAssignments.length === 0) {
         data.push([
           teacher.name,
-          `${teacher.subject_group || '-'} - ${teacher.subject || '-'}`,
+          teacher.subject_group || '-',
           '0',
           lang === 'pt' ? 'Sem atribuições.' : 'No assignments.'
         ]);
@@ -141,10 +149,10 @@ export default function ReportManager({
       }
 
       teacherAssignments.forEach((assignment, idx) => {
-        const detail = `${getRoleLabel(assignment.role)} | Sala: ${assignment.room.name} | Data: ${assignment.exam.date} | Hora: ${assignment.exam.time} | ${formatExamIdentity(assignment.exam)}`;
+        const detail = `${getRoleLabel(assignment.role)} | Sala: ${assignment.room.name} | ${formatExamIdentity(assignment.exam)}`;
         data.push([
           idx === 0 ? teacher.name : '',
-          idx === 0 ? `${teacher.subject_group || '-'} - ${teacher.subject || '-'}` : '',
+          idx === 0 ? (teacher.subject_group || '-') : '',
           idx === 0 ? String(teacherAssignments.length) : '',
           detail
         ]);
@@ -160,18 +168,9 @@ export default function ReportManager({
       styles: { fontSize: 8, cellPadding: 1.8, overflow: 'linebreak' },
       columnStyles: {
         0: { cellWidth: 45 },
-        1: { cellWidth: 40 },
+        1: { cellWidth: 18 },
         2: { cellWidth: 12, halign: 'center' },
         3: { cellWidth: 'auto' }
-      },
-      didDrawCell: (data) => {
-        // Add a bottom border to the last row of each teacher to improve separation
-        if (data.row.index > 0 && data.cell.section === 'body') {
-          const prevRow = data.table.body[data.row.index - 1];
-          if (prevRow.cells[0].text.length > 0) { // Previous row was a teacher start
-            // Optional: add a thicker border or background, but autoTable might handle that
-          }
-        }
       }
     });
 
@@ -208,7 +207,7 @@ export default function ReportManager({
       return;
     }
 
-    const title = lang === 'pt' ? 'Escala Oficial de Vigilâncias' : 'Official Exams Invigilation Scale';
+    const title = lang === 'pt' ? 'Escala Oficial de Vigilâncias - Exames Nacionais' : 'Official National Exams Invigilation Scale';
     const schoolName = 'Escola Secundária D. João II';
     const schoolYearLabel = lang === 'pt' ? 'Ano Letivo: 2025/2026' : 'School Year: 2025/2026';
     const groupMap = new Map<string, { date: string; time: string; exams: Exam[] }>();
@@ -224,73 +223,31 @@ export default function ReportManager({
       return a.time.localeCompare(b.time);
     });
 
-    let pageNumber = 1;
-    let isFirstPageOfSlot = true;
-
-    const drawFooter = () => {
-      const pageCount = (doc as any).getNumberOfPages();
-      for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i);
-        doc.setFontSize(9);
-        doc.setTextColor(0, 0, 0);
-        doc.text(
-          lang === 'pt' ? 'A Direção: _________________________' : 'The Director: _________________________',
-          15,
-          287
-        );
-        doc.text(
-          `${lang === 'pt' ? 'Página' : 'Page'} ${i} de ${pageCount}`,
-          180,
-          287,
-          { align: 'right' }
-        );
-      }
-    };
-
-    const drawSlotHeader = (slotDate: string, slotTime: string, isContinuation: boolean = false) => {
+    const drawSlotHeader = (slotDate: string, slotTime: string) => {
       let startY = 12;
-      if (!isContinuation) {
-        doc.setFillColor(15, 23, 42);
-        doc.rect(10, startY, 190, 34, 'F');
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(14);
-        doc.text(schoolName, 15, startY + 10);
-        doc.setFontSize(9);
-        doc.text(schoolYearLabel, 15, startY + 17);
-        doc.setFontSize(11);
-        doc.text(title, 15, startY + 24);
-        doc.setFontSize(10);
-        doc.text(
-          lang === 'pt'
-            ? `Dia: ${slotDate} | Hora: ${slotTime}`
-            : `Date: ${slotDate} | Time: ${slotTime}`,
-          15,
-          startY + 31
-        );
-        return startY + 40;
-      } else {
-        doc.setFillColor(241, 245, 249);
-        doc.rect(10, startY, 190, 15, 'F');
-        doc.setTextColor(15, 23, 42);
-        doc.setFontSize(10);
-        doc.text(
-          lang === 'pt'
-            ? `Continuação - Página ${pageNumber} | Dia: ${slotDate} | Hora: ${slotTime}`
-            : `Continuation - Page ${pageNumber} | Date: ${slotDate} | Time: ${slotTime}`,
-          15,
-          startY + 9
-        );
-        return startY + 18;
-      }
+      doc.setFillColor(15, 23, 42);
+      doc.rect(10, startY, 190, 34, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(14);
+      doc.text(schoolName, 15, startY + 10);
+      doc.setFontSize(9);
+      doc.text(schoolYearLabel, 15, startY + 17);
+      doc.setFontSize(11);
+      doc.text(title, 15, startY + 24);
+      doc.setFontSize(10);
+      doc.text(
+        lang === 'pt'
+          ? `Dia: ${slotDate} | Hora: ${slotTime}`
+          : `Date: ${slotDate} | Time: ${slotTime}`,
+        15,
+        startY + 31
+      );
+      return startY + 40;
     };
 
     groupedSlots.forEach((slot, slotIdx) => {
-      if (slotIdx > 0) {
-        doc.addPage();
-        pageNumber++;
-        isFirstPageOfSlot = true;
-      }
-      let currentY = drawSlotHeader(slot.date, slot.time, false);
+      if (slotIdx > 0) doc.addPage();
+      let currentY = drawSlotHeader(slot.date, slot.time);
 
       slot.exams.forEach(exam => {
         const examRows = [...(allocationsByExam.get(exam.id) || [])].sort((a, b) =>
@@ -298,33 +255,21 @@ export default function ReportManager({
         );
         if (examRows.length === 0) return;
 
-        // Check if we need a new page for this exam
-        const estimatedExamHeaderHeight = 16;
-        const estimatedTableHeight = examRows.length * 3 * 10;
-        if (currentY + estimatedExamHeaderHeight + estimatedTableHeight > 270) {
+        const estimatedHeight = 16 + (examRows.length * 3 * 8);
+        if (currentY + estimatedHeight > 280) {
           doc.addPage();
-          pageNumber++;
-          isFirstPageOfSlot = false;
-          currentY = drawSlotHeader(slot.date, slot.time, true);
+          currentY = drawSlotHeader(slot.date, slot.time);
         }
 
-        // Exam header
-        const examLabelParts = [
-          lang === 'pt' ? `Data: ${exam.date} | Hora: ${exam.time}` : `Date: ${exam.date} | Time: ${exam.time}`,
-          formatExamIdentity(exam)
-        ];
-        const examLabelLines = doc.splitTextToSize(examLabelParts.join(' | '), 183);
-        const examHeaderHeight = Math.max(16, examLabelLines.length * 5 + 6);
-        doc.setFillColor(59, 130, 246);
+        const examLabelLines = doc.splitTextToSize(formatExamIdentity(exam), 183);
+        const examHeaderHeight = Math.max(12, examLabelLines.length * 5 + 4);
+        doc.setFillColor(241, 245, 249);
         doc.rect(10, currentY, 190, examHeaderHeight, 'F');
-        doc.setTextColor(255, 255, 255);
+        doc.setTextColor(15, 23, 42);
         doc.setFontSize(10);
-        doc.setFont('helvetica', 'bold');
-        doc.text(examLabelLines, 13, currentY + 6);
-        doc.setFont('helvetica', 'normal');
-        currentY += examHeaderHeight + 3;
+        doc.text(examLabelLines, 13, currentY + 5);
+        currentY += examHeaderHeight + 2;
 
-        // Prepare table data for this exam
         const tableHeaders = [[
           lang === 'pt' ? 'Sala' : 'Room',
           lang === 'pt' ? 'Função' : 'Role',
@@ -332,60 +277,36 @@ export default function ReportManager({
           lang === 'pt' ? 'Assinatura' : 'Signature'
         ]];
 
-
-
         const tableData: string[][] = [];
-        examRows.forEach(({ alloc, room }, roomIdx) => {
-          // Add a small separator between rooms (except first)
-          if (roomIdx > 0) {
-            // Optional: add an empty row or a separator, but let's just proceed
-          }
+        examRows.forEach(({ alloc, room }) => {
+          const v1 = alloc.invigilator1Id ? teacherById.get(alloc.invigilator1Id)?.name || '-' : '-';
+          const v2 = alloc.invigilator2Id ? teacherById.get(alloc.invigilator2Id)?.name || '-' : '-';
+          const sub = alloc.substituteId ? teacherById.get(alloc.substituteId)?.name || '-' : '-';
 
-          const getTeacherText = (teacherId: string | null) => {
-            if (!teacherId) return '-';
-            const teacher = teacherById.get(teacherId);
-            if (!teacher) return '-';
-            return `${teacher.name}\n(${teacher.subject_group} - ${teacher.subject})`;
-          };
-
-          const v1Text = getTeacherText(alloc.invigilator1Id);
-          const v2Text = getTeacherText(alloc.invigilator2Id);
-          const subText = getTeacherText(alloc.substituteId);
-
-          tableData.push([room.name, getRoleLabel('invigilator1'), v1Text, '____________________']);
-          tableData.push(['', getRoleLabel('invigilator2'), v2Text, '____________________']);
-          tableData.push(['', getRoleLabel('substitute'), subText, '____________________']);
+          tableData.push([room.name, getRoleLabel('invigilator1'), v1, '____________________']);
+          tableData.push(['', getRoleLabel('invigilator2'), v2, '____________________']);
+          tableData.push(['', getRoleLabel('substitute'), sub, '____________________']);
         });
 
-        // Draw table with autoTable
         autoTable(doc, {
           startY: currentY,
           head: tableHeaders,
           body: tableData,
           theme: 'grid',
-          headStyles: { fillColor: [15, 23, 42], textColor: 255 },
-          styles: { fontSize: 9, cellPadding: 2, minCellHeight: 10 },
-          margin: { left: 10, right: 10, bottom: 20 },
+          headStyles: { fillColor: [15, 23, 42] },
+          styles: { fontSize: 9, cellPadding: 1.8 },
+          margin: { left: 10, right: 10 },
           columnStyles: {
             0: { cellWidth: 32 },
             1: { cellWidth: 32 },
             2: { cellWidth: 'auto' },
             3: { cellWidth: 44 }
-          },
-          willDrawCell: (data) => {
-            if (data.cell.section === 'body' && data.column.index === 2 && data.cell.text.length > 1) {
-              // The second line is the group/subject - style it
-              data.doc.setFontSize(7);
-              data.doc.setFont('helvetica', 'italic');
-            }
           }
         });
 
-        currentY = ((doc as any).lastAutoTable?.finalY || currentY) + 8;
+        currentY = ((doc as any).lastAutoTable?.finalY || currentY) + 6;
       });
     });
-
-    drawFooter();
 
     doc.save(`escala_vigilancias_${new Date().toISOString().slice(0, 10)}.pdf`);
   };
