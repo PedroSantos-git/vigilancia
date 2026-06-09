@@ -387,7 +387,7 @@ export default function ReportManager({
         const examHeaderHeight = Math.max(16, examLabelLines.length * 5 + 6);
 
         // Check if we need a new page before this exam
-        if (currentY + examHeaderHeight + 30 > 270) {
+        if (currentY + examHeaderHeight + 40 > 270) {
           doc.addPage();
           globalPageCounter++;
           currentPageInSlot++;
@@ -408,7 +408,7 @@ export default function ReportManager({
         // Draw each room and vigilantes
         examRows.forEach(({ alloc, room }) => {
           // Check if we need a new page for this room
-          if (currentY + 35 > 270) {
+          if (currentY + 45 > 270) {
             doc.addPage();
             globalPageCounter++;
             currentPageInSlot++;
@@ -443,10 +443,14 @@ export default function ReportManager({
             doc.setTextColor(71, 85, 105);
             const v1Info = `(${v1.subject_group} - ${v1.subject})${v1Role ? ` | ${v1Role}` : ''}`;
             doc.text(v1Info, 18, currentY + 4);
-            // Signature line
+            // Signature label and line
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.text(lang === 'pt' ? 'Assinatura:' : 'Signature:', 18, currentY + 8);
             doc.setDrawColor(100, 100, 100);
-            doc.line(18, currentY + 6, 190, currentY + 6);
-            currentY += 10;
+            doc.line(18, currentY + 10, 190, currentY + 10);
+            currentY += 14;
           }
 
           // Draw vigilante 2
@@ -462,10 +466,14 @@ export default function ReportManager({
             doc.setTextColor(71, 85, 105);
             const v2Info = `(${v2.subject_group} - ${v2.subject})${v2Role ? ` | ${v2Role}` : ''}`;
             doc.text(v2Info, 18, currentY + 4);
-            // Signature line
+            // Signature label and line
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.text(lang === 'pt' ? 'Assinatura:' : 'Signature:', 18, currentY + 8);
             doc.setDrawColor(100, 100, 100);
-            doc.line(18, currentY + 6, 190, currentY + 6);
-            currentY += 10;
+            doc.line(18, currentY + 10, 190, currentY + 10);
+            currentY += 14;
           }
 
           currentY += 4;
@@ -475,7 +483,7 @@ export default function ReportManager({
       // Now draw substitutes for this slot at the end
       if (slotSubstitutes.size > 0) {
         // Check if we need a new page for substitutes
-        const estimatedSubHeight = 20 + (slotSubstitutes.size * 10);
+        const estimatedSubHeight = 20 + (slotSubstitutes.size * 14);
         if (currentY + estimatedSubHeight > 270) {
           doc.addPage();
           globalPageCounter++;
@@ -498,7 +506,7 @@ export default function ReportManager({
           const sub = teacherById.get(subId);
           if (!sub) return;
 
-          if (currentY + 12 > 270) {
+          if (currentY + 16 > 270) {
             doc.addPage();
             globalPageCounter++;
             currentPageInSlot++;
@@ -516,10 +524,14 @@ export default function ReportManager({
           doc.setTextColor(71, 85, 105);
           const subInfo = `(${sub.subject_group} - ${sub.subject})${subRole ? ` | ${subRole}` : ''}`;
           doc.text(subInfo, 18, currentY + 4);
-          // Signature line
+          // Signature label and line
+          doc.setTextColor(0, 0, 0);
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'normal');
+          doc.text(lang === 'pt' ? 'Assinatura:' : 'Signature:', 18, currentY + 8);
           doc.setDrawColor(100, 100, 100);
-          doc.line(18, currentY + 6, 190, currentY + 6);
-          currentY += 10;
+          doc.line(18, currentY + 10, 190, currentY + 10);
+          currentY += 14;
         });
       }
 
