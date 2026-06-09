@@ -96,19 +96,46 @@ export default function ReportManager({
     });
 
     const doc = new jsPDF();
-    doc.setFontSize(16);
-    doc.text(lang === 'pt' ? 'Resumo de Atribuições por Professor' : 'Teacher Assignments Summary', 14, 15);
-    doc.setFontSize(10);
-    doc.text(`${new Date().toLocaleDateString()}`, 14, 22);
 
-    const headers = [[
-      lang === 'pt' ? 'Nome' : 'Name',
-      lang === 'pt' ? 'Grupo / Disciplina' : 'Group / Subject',
-      lang === 'pt' ? 'Total' : 'Total',
-      lang === 'pt' ? 'Exame' : 'Exam'
-    ]];
+    const addPageNumbers = () => {
+      const pageCount = (doc as any).getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(10);
+        doc.setTextColor(100, 100, 100);
+        doc.text(
+          `${lang === 'pt' ? 'Página' : 'Page'} ${i} / ${pageCount}`,
+          doc.internal.pageSize.width - 15,
+          doc.internal.pageSize.height - 10,
+          { align: 'right' }
+        );
+      }
+    };
 
-    const data: string[][] = [];
+    const formatExamLine1 = (exam: Exam) => {
+      const parts: string[] = [exam.name, `${exam.year}º`];
+      if (exam.code) parts.push(`(${exam.code})`);
+      if (exam.modality) parts.push(exam.modality);
+      if (exam.shift) parts.push(exam.shift);
+      if (exam.phase) parts.push(`${exam.phase}ª Fase`);
+      return parts.join(' ');
+    };
+
+    const formatExamLine2 = (role: string, room: Room, exam: Exam) => {
+      return `${getRoleLabel(role)} | Sala: ${room.name} | Data: ${exam.date} | Hora: ${exam.time}`;
+    };
+
+    // Title
+    doc.setFontSize(18);
+    doc.setTextColor(30, 41, 59);
+    doc.setFont('helvetica', 'bold');
+    doc.text(lang === 'pt' ? 'Resumo de Atribuições por Professor' : 'Teacher Assignments Summary', 14, 20);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text(`${new Date().toLocaleDateString()}`, 14, 28);
+
+    let currentY = 35;
     const sortedTeachers = [...(Array.isArray(teachers) ? teachers : [])]
       .filter(teacher => {
         const teacherAssignments = assignmentsByTeacher.get(teacher.id) || [];
@@ -116,13 +143,11 @@ export default function ReportManager({
         const roleNorm = String(teacher.role || '').toLowerCase().trim();
         const isEligibleByProfile = teacher.available && roleNorm === '';
 
-        // Default listing: only available teachers with no special role.
-        // Exception: if teacher already has assignments, always include.
         return isEligibleByProfile || hasAssignments;
       })
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    sortedTeachers.forEach(teacher => {
+    sortedTeachers.forEach((teacher, teacherIdx) => {
       const teacherAssignments = [...(assignmentsByTeacher.get(teacher.id) || [])].sort((a, b) => {
         if (a.exam.date !== b.exam.date) return a.exam.date.localeCompare(b.exam.date);
         if (a.exam.time !== b.exam.time) return a.exam.time.localeCompare(b.exam.time);
@@ -130,42 +155,83 @@ export default function ReportManager({
         return a.room.name.localeCompare(b.room.name, undefined, { numeric: true, sensitivity: 'base' });
       });
 
+      // Check if we need a new page for this teacher
+      const estimatedHeightForTeacher = 30 + (teacherAssignments.length * 20);
+      if (currentY + estimatedHeightForTeacher > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        currentY = 20;
+      }
+
+      // Teacher Header
+      doc.setFillColor(241, 245, 249);
+      doc.roundedRect(10, currentY - 5, 190, 25, 3, 3, 'F');
+      doc.setTextColor(15, 23, 42);
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text(teacher.name, 14, currentY + 7);
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'italic');
+      doc.setTextColor(71, 85, 105);
+      doc.text(`${teacher.subject_group} - ${teacher.subject}`, 14, currentY + 15);
+
+      // Total count
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(15, 23, 42);
+      doc.text(`${lang === 'pt' ? 'Total' : 'Total'}: ${teacherAssignments.length}`, 188, currentY + 10, { align: 'right' });
+
+      currentY += 25;
+
       if (teacherAssignments.length === 0) {
-        data.push([
-          teacher.name,
-          `${teacher.subject_group || '-'} - ${teacher.subject || '-'}`,
-          '0',
-          lang === 'pt' ? 'Sem atribuições.' : 'No assignments.'
-        ]);
-        return;
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 116, 139);
+        doc.text(lang === 'pt' ? 'Sem atribuições.' : 'No assignments.', 20, currentY + 5);
+        currentY += 15;
+      } else {
+        // Assignments
+        teacherAssignments.forEach((assignment, idx) => {
+          // Check for new page within teacher's assignments (try to keep together)
+          if (currentY + 20 > doc.internal.pageSize.height - 20) {
+            doc.addPage();
+            currentY = 20;
+            // Repeat teacher name at top of new page
+            doc.setFillColor(241, 245, 249);
+            doc.roundedRect(10, currentY - 5, 190, 25, 3, 3, 'F');
+            doc.setTextColor(15, 23, 42);
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'bold');
+            doc.text(`${teacher.name} (${lang === 'pt' ? 'continuação' : 'continued'})`, 14, currentY + 7);
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'italic');
+            doc.setTextColor(71, 85, 105);
+            doc.text(`${teacher.subject_group} - ${teacher.subject}`, 14, currentY + 15);
+            currentY += 25;
+          }
+
+          // Exam line 1
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(30, 64, 175);
+          doc.text(formatExamLine1(assignment.exam), 20, currentY + 5);
+
+          // Exam line 2
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(71, 85, 105);
+          doc.text(formatExamLine2(assignment.role, assignment.room, assignment.exam), 20, currentY + 12);
+
+          currentY += 18;
+        });
       }
 
-      teacherAssignments.forEach((assignment, idx) => {
-        const detail = `${getRoleLabel(assignment.role)} | Sala: ${assignment.room.name} | Data: ${assignment.exam.date} | Hora: ${assignment.exam.time} | ${formatExamIdentity(assignment.exam)}`;
-        data.push([
-          idx === 0 ? teacher.name : '',
-          idx === 0 ? `${teacher.subject_group || '-'} - ${teacher.subject || '-'}` : '',
-          idx === 0 ? String(teacherAssignments.length) : '',
-          detail
-        ]);
-      });
-    });
-
-    autoTable(doc, {
-      head: headers,
-      body: data,
-      startY: 30,
-      theme: 'grid',
-      headStyles: { fillColor: [15, 23, 42] },
-      styles: { fontSize: 8, cellPadding: 1.8, overflow: 'linebreak' },
-      columnStyles: {
-        0: { cellWidth: 45 },
-        1: { cellWidth: 40 },
-        2: { cellWidth: 12, halign: 'center' },
-        3: { cellWidth: 'auto' }
+      // Add spacing between teachers
+      if (teacherIdx < sortedTeachers.length - 1) {
+        currentY += 10;
       }
     });
 
+    addPageNumbers();
     doc.save(`resumo_atribuicoes_${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
