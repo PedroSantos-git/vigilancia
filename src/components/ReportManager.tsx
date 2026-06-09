@@ -155,8 +155,12 @@ export default function ReportManager({
         return a.room.name.localeCompare(b.room.name, undefined, { numeric: true, sensitivity: 'base' });
       });
 
+      // Calculate teacher header height based on whether teacher has a role
+      const hasRole = !!teacher.role;
+      const headerHeight = hasRole ? 35 : 25;
+
       // Check if we need a new page for this teacher
-      const estimatedHeightForTeacher = 30 + (teacherAssignments.length * 20);
+      const estimatedHeightForTeacher = headerHeight + (teacherAssignments.length * 20);
       if (currentY + estimatedHeightForTeacher > doc.internal.pageSize.height - 20) {
         doc.addPage();
         currentY = 20;
@@ -164,15 +168,23 @@ export default function ReportManager({
 
       // Teacher Header
       doc.setFillColor(241, 245, 249);
-      doc.roundedRect(10, currentY - 5, 190, 25, 3, 3, 'F');
+      doc.roundedRect(10, currentY - 5, 190, headerHeight, 3, 3, 'F');
       doc.setTextColor(15, 23, 42);
       doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
       doc.text(teacher.name, 14, currentY + 7);
+      let currentLine = 1;
+      if (hasRole) {
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(71, 85, 105);
+        doc.text(teacher.role, 14, currentY + 14);
+        currentLine++;
+      }
       doc.setFontSize(9);
       doc.setFont('helvetica', 'italic');
       doc.setTextColor(71, 85, 105);
-      doc.text(`${teacher.subject_group} - ${teacher.subject}`, 14, currentY + 15);
+      doc.text(`${teacher.subject_group} - ${teacher.subject}`, 14, currentY + 7 + (currentLine * 7));
 
       // Total count
       doc.setFontSize(10);
@@ -180,7 +192,7 @@ export default function ReportManager({
       doc.setTextColor(15, 23, 42);
       doc.text(`${lang === 'pt' ? 'Total' : 'Total'}: ${teacherAssignments.length}`, 188, currentY + 10, { align: 'right' });
 
-      currentY += 25;
+      currentY += headerHeight;
 
       if (teacherAssignments.length === 0) {
         doc.setFontSize(10);
@@ -195,18 +207,27 @@ export default function ReportManager({
           if (currentY + 20 > doc.internal.pageSize.height - 20) {
             doc.addPage();
             currentY = 20;
-            // Repeat teacher name at top of new page
+            // Repeat teacher name at top of new page with continuation label
+            const continuationHeaderHeight = hasRole ? 35 : 25;
             doc.setFillColor(241, 245, 249);
-            doc.roundedRect(10, currentY - 5, 190, 25, 3, 3, 'F');
+            doc.roundedRect(10, currentY - 5, 190, continuationHeaderHeight, 3, 3, 'F');
             doc.setTextColor(15, 23, 42);
             doc.setFontSize(12);
             doc.setFont('helvetica', 'bold');
             doc.text(`${teacher.name} (${lang === 'pt' ? 'continuação' : 'continued'})`, 14, currentY + 7);
+            let continuationLine = 1;
+            if (hasRole) {
+              doc.setFontSize(9);
+              doc.setFont('helvetica', 'normal');
+              doc.setTextColor(71, 85, 105);
+              doc.text(teacher.role, 14, currentY + 14);
+              continuationLine++;
+            }
             doc.setFontSize(9);
             doc.setFont('helvetica', 'italic');
             doc.setTextColor(71, 85, 105);
-            doc.text(`${teacher.subject_group} - ${teacher.subject}`, 14, currentY + 15);
-            currentY += 25;
+            doc.text(`${teacher.subject_group} - ${teacher.subject}`, 14, currentY + 7 + (continuationLine * 7));
+            currentY += continuationHeaderHeight;
           }
 
           // Exam line 1
