@@ -444,13 +444,9 @@ export default function ReportManager({
             doc.setTextColor(71, 85, 105);
             const v1Info = `(${v1.subject_group} - ${v1.subject})${v1Role ? ` | ${v1Role}` : ''}`;
             doc.text(v1Info, 18, currentY + 4);
-            // Right side: Assinatura and line
-            doc.setTextColor(0, 0, 0);
-            doc.setFontSize(9);
-            doc.setFont('helvetica', 'normal');
-            doc.text(lang === 'pt' ? 'Assinatura:' : 'Signature:', 120, currentY);
+            // Right side: Signature line
             doc.setDrawColor(100, 100, 100);
-            doc.line(140, currentY + 1, 190, currentY + 1);
+            doc.line(120, currentY + 1, 190, currentY + 1);
             currentY += 10;
           }
 
@@ -468,13 +464,9 @@ export default function ReportManager({
             doc.setTextColor(71, 85, 105);
             const v2Info = `(${v2.subject_group} - ${v2.subject})${v2Role ? ` | ${v2Role}` : ''}`;
             doc.text(v2Info, 18, currentY + 4);
-            // Right side: Assinatura and line
-            doc.setTextColor(0, 0, 0);
-            doc.setFontSize(9);
-            doc.setFont('helvetica', 'normal');
-            doc.text(lang === 'pt' ? 'Assinatura:' : 'Signature:', 120, currentY);
+            // Right side: Signature line
             doc.setDrawColor(100, 100, 100);
-            doc.line(140, currentY + 1, 190, currentY + 1);
+            doc.line(120, currentY + 1, 190, currentY + 1);
             currentY += 10;
           }
 
@@ -527,13 +519,9 @@ export default function ReportManager({
           doc.setTextColor(71, 85, 105);
           const subInfo = `(${sub.subject_group} - ${sub.subject})${subRole ? ` | ${subRole}` : ''}`;
           doc.text(subInfo, 18, currentY + 4);
-          // Right side: Assinatura and line
-          doc.setTextColor(0, 0, 0);
-          doc.setFontSize(9);
-          doc.setFont('helvetica', 'normal');
-          doc.text(lang === 'pt' ? 'Assinatura:' : 'Signature:', 120, currentY);
+          // Right side: Signature line
           doc.setDrawColor(100, 100, 100);
-          doc.line(140, currentY + 1, 190, currentY + 1);
+          doc.line(120, currentY + 1, 190, currentY + 1);
           currentY += 10;
         });
       }
