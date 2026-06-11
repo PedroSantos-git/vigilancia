@@ -192,8 +192,7 @@ function getOtherPeriod(period: "09:00" | "14:00"): "09:00" | "14:00" {
 
 /** Exame que requer vigilante EE (campo EE ou modalidade EE). */
 export function isEeExam(exam: Exam): boolean {
-  if (exam.EE) return true;
-  return normalizeText(exam.modality) === "ee";
+  return exam.EE === true;
 }
 
 function buildTeacherById(teachers: Teacher[]): Map<string, Teacher> {

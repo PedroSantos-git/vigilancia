@@ -12,12 +12,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(200).json([]);
         }
         const mappedExams = exams.map(e => {
-          const modality = String(e.modality ?? '').trim().toUpperCase();
           const eeFlag = Boolean(e.ee ?? e.EE ?? false);
           return {
             ...e,
             registrationsCount: e.registrations_count ?? e.registrationsCount ?? 0,
-            EE: eeFlag || modality === 'EE',
+            EE: eeFlag,
             roomIds: typeof e.room_ids === 'string' ? JSON.parse(e.room_ids) : (e.room_ids ?? e.roomIds ?? [])
           };
         });
