@@ -1,12 +1,12 @@
 {
   "rewrites": [
     {
-      "source": "/api/auth/:path*",
-      "destination": "/api/auth/:path*"
+      "source": "/api/auth/:nextauth*",
+      "destination": "/api/auth/[...nextauth].js?nextauth=:nextauth*"
     },
     {
       "source": "/api/:path*",
-      "destination": "/api/index"
+      "destination": "/api/index.js"
     }
   ]
 }
