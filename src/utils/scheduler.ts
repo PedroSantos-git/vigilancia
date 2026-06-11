@@ -314,10 +314,11 @@ function prioritizePisoZero(candidates: Teacher[], room: Room): Teacher[] {
     console.log(`  → Filtrados (não piso zero): ${filtered.map(t => t.name)}`);
     return filtered;
   }
-  // Em salas de piso 0, docentes PISO_ZERO são elegíveis, mas não exclusivos.
-  // Regra: PISO_ZERO só pode ir para piso 0; não há regra inversa.
-  console.log(`  → Resultado (piso zero): ${candidates.map(t => t.name)}`);
-  return candidates;
+  // Em salas de piso 0, dar prioridade a docentes com PISO_ZERO=true.
+  const pisoZeroCandidates = candidates.filter(teacher => teacher.PISO_ZERO);
+  const result = pisoZeroCandidates.length > 0 ? pisoZeroCandidates : candidates;
+  console.log(`  → Resultado (piso zero): ${result.map(t => t.name)}`);
+  return result;
 }
 
 function pickLeastUsedRandom(candidates: Teacher[], assignmentCounts: Map<string, number>): Teacher | null {
@@ -366,46 +367,7 @@ function pickEeTeacher(
 
   const tryPool = (pool: Teacher[], poolName: string): Teacher | null => {
     console.log(`[pickEeTeacher] Pool ${poolName} (${pool.length} docentes)`);
-    const filterAssignable = (candidatesPool: Teacher[], contextLabel: string): Teacher[] =>
-      candidatesPool.filter(teacher => {
-        if (excludeIds.has(teacher.id)) {
-          console.log(`  → ${teacher.name}: Excluído (excludeIds)`);
-          return false;
-        }
-        const can = canAssignTeacherToSlot(
-          teacher,
-          exam,
-          room,
-          alloc,
-          dayBusy,
-          assignmentCounts,
-          maxAssignmentsPerTeacher,
-          slotOptions
-        );
-        if (!can) {
-          console.log(`  → ${teacher.name}: Não pode ser atribuído (${contextLabel})`);
-        }
-        return can;
-      });
-
-    // Regra específica: em sala de piso 0, tentar primeiro docentes EE com PISO_ZERO=true.
-    if (isFloorZero(room)) {
-      const pisoZeroPool = pool.filter(teacher => teacher.PISO_ZERO);
-      const fallbackPool = pool.filter(teacher => !teacher.PISO_ZERO);
-
-      const pisoZeroCandidates = filterAssignable(pisoZeroPool, `${poolName}/PISO_ZERO`);
-      if (pisoZeroCandidates.length > 0) {
-        console.log(`  → Candidatos válidos (prioridade PISO_ZERO): ${pisoZeroCandidates.map(t => t.name)}`);
-        return pickLeastUsedRandom(pisoZeroCandidates, assignmentCounts);
-      }
-
-      console.log("  → Sem EE PISO_ZERO elegível; usar EE restantes no piso 0.");
-      const fallbackCandidates = filterAssignable(fallbackPool, `${poolName}/fallback`);
-      console.log(`  → Candidatos válidos (fallback): ${fallbackCandidates.map(t => t.name)}`);
-      return pickLeastUsedRandom(fallbackCandidates, assignmentCounts);
-    }
-
-    const candidates = prioritizePisoZero(pool, room).filter(teacher => {
+    let candidates = pool.filter(teacher => {
       if (excludeIds.has(teacher.id)) {
         console.log(`  → ${teacher.name}: Excluído (excludeIds)`);
         return false;
@@ -425,6 +387,7 @@ function pickEeTeacher(
       }
       return can;
     });
+    candidates = prioritizePisoZero(candidates, room);
     console.log(`  → Candidatos válidos: ${candidates.map(t => t.name)}`);
     return pickLeastUsedRandom(candidates, assignmentCounts);
   };

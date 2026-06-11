@@ -42,16 +42,16 @@ Um exame é tratado como EE quando:
 2. **Suplente EE opcional**: em exame EE, pode existir EE em `Suplente` quando houver elegibilidade/capacidade.
 3. Docente EE **nunca** é colocado em `Vigilante 2` de exame EE.
 
-### 4.3 Prioridade EE em salas de piso 0
-Quando a sala é piso 0 e existem candidatos EE:
-1. O algoritmo tenta **primeiro** docentes EE com `PISO_ZERO = true`.
-2. Se nenhum desses for elegível, faz fallback para os restantes docentes EE elegíveis.
-3. Isto é uma **prioridade**, não exclusividade.
+### 4.3 EE em salas de piso 0
+Em exames EE realizados em sala de piso 0:
+1. Aplica-se a prioridade global de piso 0 (secção 5).
+2. Se existirem docentes EE com `PISO_ZERO=true` elegíveis, são tentados primeiro.
+3. Se não existirem elegíveis com `PISO_ZERO=true`, o algoritmo usa os restantes EE elegíveis.
 
 ## 5) Regras de Piso 0 (comportamento global)
 1. Em sala **não piso 0**, docentes `PISO_ZERO=true` são excluídos.
 2. Em sala **piso 0**, podem ser usados docentes `PISO_ZERO=true` e também docentes sem essa limitação.
-3. Exceção de prioridade: em sala piso 0, dá-se prioridade a EE com `PISO_ZERO=true`.
+3. Exceção de prioridade: em sala piso 0, dá-se prioridade a qualquer docente com `PISO_ZERO=true`.
 
 ## 6) Docentes com cargos especiais
 1. Só entram após esgotar os docentes regulares nas fases anteriores.
