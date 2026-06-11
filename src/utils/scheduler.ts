@@ -195,13 +195,12 @@ function canAssignTeacherToSlot(
   assignmentCounts: Map<string, number>,
   maxAssignmentsPerTeacher: number
 ): boolean {
-  const period = getPeriodFromTime(exam.time);
   const alreadyInRoom = new Set([alloc.invigilator1Id, alloc.invigilator2Id, alloc.substituteId]);
 
   if (alreadyInRoom.has(teacher.id)) return false;
   if (hasSubjectConflict(teacher, exam)) return false;
   if (isTeacherUnavailableAt(teacher, exam.date, exam.time, exam)) return false;
-  if (dayBusy.has(`${teacher.id}@@${exam.date}@@${period}`)) return false;
+  if (dayBusy.has(`${teacher.id}@@${exam.date}`)) return false;
   if (teacher.PISO_ZERO && !isFloorZero(room)) return false;
   if (getAssignmentCount(assignmentCounts, teacher.id) >= maxAssignmentsPerTeacher) return false;
   return true;
@@ -234,8 +233,7 @@ function assignTeacherToSlot(
   labelSuffix = ""
 ): void {
   alloc[role] = teacher.id;
-  const period = getPeriodFromTime(exam.time);
-  dayBusy.add(`${teacher.id}@@${exam.date}@@${period}`);
+  dayBusy.add(`${teacher.id}@@${exam.date}`);
   assignmentCounts.set(teacher.id, getAssignmentCount(assignmentCounts, teacher.id) + 1);
   notifications.push({
     teacherId: teacher.id,
@@ -251,10 +249,14 @@ function assignEeTeachersToExams(
   assignmentCounts: Map<string, number>,
   maxAssignmentsPerTeacher: number,
   warnings: string[],
-  notifications: Array<{ teacherId: string; message: string }>
+  notifications: Array<{ teacherId: string; message: string }>,
+  isSingleDayMode: boolean
 ): void {
   const eeExamIds = [...new Set(pairs.filter(pair => pair.exam.EE).map(pair => pair.exam.id))];
   if (eeExamIds.length === 0 || eeTeachers.length === 0) return;
+
+  // In single day mode, only assign EE teachers to EE exams (which is what this function already does!)
+  // So we don't need to change that part!
 
   let eeTeacherCursor = 0;
 
@@ -606,17 +608,16 @@ export function autoAllocateAll(
   existingAllocations.forEach(alloc => {
     const ex = examById.get(alloc.examId);
     if (!ex) return;
-    const period = getPeriodFromTime(ex.time);
     if (alloc.invigilator1Id) {
-      dayBusy.add(`${alloc.invigilator1Id}@@${ex.date}@@${period}`);
+      dayBusy.add(`${alloc.invigilator1Id}@@${ex.date}`);
       assignmentCounts.set(alloc.invigilator1Id, (assignmentCounts.get(alloc.invigilator1Id) || 0) + 1);
     }
     if (alloc.invigilator2Id) {
-      dayBusy.add(`${alloc.invigilator2Id}@@${ex.date}@@${period}`);
+      dayBusy.add(`${alloc.invigilator2Id}@@${ex.date}`);
       assignmentCounts.set(alloc.invigilator2Id, (assignmentCounts.get(alloc.invigilator2Id) || 0) + 1);
     }
     if (alloc.substituteId) {
-      dayBusy.add(`${alloc.substituteId}@@${ex.date}@@${period}`);
+      dayBusy.add(`${alloc.substituteId}@@${ex.date}`);
       assignmentCounts.set(alloc.substituteId, (assignmentCounts.get(alloc.substituteId) || 0) + 1);
     }
   });
@@ -682,7 +683,8 @@ export function autoAllocateAll(
     assignmentCounts,
     maxAssignmentsPerTeacher,
     warnings,
-    notifications
+    notifications,
+    Boolean(onlyDate)
   );
 
   // Fase 2: docentes com indisponibilidades/restrições
@@ -766,10 +768,9 @@ export function autoAllocate(
   allAllocations.forEach(alloc => {
     const ex = examById.get(alloc.examId);
     if (!ex) return;
-    const period = getPeriodFromTime(ex.time);
-    if (alloc.invigilator1Id) dayBusy.add(`${alloc.invigilator1Id}@@${ex.date}@@${period}`);
-    if (alloc.invigilator2Id) dayBusy.add(`${alloc.invigilator2Id}@@${ex.date}@@${period}`);
-    if (alloc.substituteId) dayBusy.add(`${alloc.substituteId}@@${ex.date}@@${period}`);
+    if (alloc.invigilator1Id) dayBusy.add(`${alloc.invigilator1Id}@@${ex.date}`);
+    if (alloc.invigilator2Id) dayBusy.add(`${alloc.invigilator2Id}@@${ex.date}`);
+    if (alloc.substituteId) dayBusy.add(`${alloc.substituteId}@@${ex.date}`);
   });
 
   const assignmentCounts = new Map<string, number>();
@@ -829,7 +830,8 @@ export function autoAllocate(
     assignmentCounts,
     maxAssignmentsPerTeacher,
     warnings,
-    notifications
+    notifications,
+    false
   );
 
   assignRestrictedTeachers(
