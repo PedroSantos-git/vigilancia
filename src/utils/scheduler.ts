@@ -711,8 +711,9 @@ function assignCargoTeachers(
       );
 
       candidates = filterTeachersForExamSlot(candidates, pair.exam, restrictEeToNonEeExams);
+      // For cargo teachers, don't allow EE teachers unless it's an EE exam (and appropriate role)
       candidates = candidates.filter(
-        teacher => !teacher.EE || canAssignEeTeacherToEeExamSlot(pair.exam, role, onlyDate)
+        teacher => !teacher.EE || (isEeExam(pair.exam) && canAssignEeTeacherToEeExamSlot(pair.exam, role, onlyDate))
       );
       candidates = prioritizePisoZero(candidates, pair.room);
 
@@ -955,10 +956,10 @@ export function autoAllocateAll(
 
   const restrictedTeacherIds = new Set(
     basePool
-      .filter(teacher => teacher.unavailabilities && teacher.unavailabilities.length > 0)
+      .filter(teacher => !teacher.EE && teacher.unavailabilities && teacher.unavailabilities.length > 0)
       .map(teacher => teacher.id)
   );
-  const restrictedTeachers = basePool.filter(teacher => restrictedTeacherIds.has(teacher.id));
+  const restrictedTeachers = basePool.filter(teacher => !teacher.EE && restrictedTeacherIds.has(teacher.id));
   const genericPool = basePool.filter(
     teacher => !restrictedTeacherIds.has(teacher.id) && !teacher.EE
   );
@@ -1143,7 +1144,7 @@ export function autoAllocate(
     Math.ceil(remainingSlots / Math.max(basePool.length, 1)) +
     Math.max(0, ...Array.from(assignmentCounts.values()));
 
-  const restrictedTeachers = basePool.filter(teacher => teacher.unavailabilities && teacher.unavailabilities.length > 0);
+  const restrictedTeachers = basePool.filter(teacher => !teacher.EE && teacher.unavailabilities && teacher.unavailabilities.length > 0);
   const genericPool = basePool.filter(
     teacher => !restrictedTeachers.some(t => t.id === teacher.id) && !teacher.EE
   );
