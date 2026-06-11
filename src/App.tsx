@@ -400,7 +400,7 @@ export default function App() {
 
       const rolesData = await api.roles.getAll();
       const roles = Array.isArray(rolesData) ? rolesData : [];
-      const planningResult = autoAllocateAll(exams, rooms, teachers, roles);
+      const planningResult = autoAllocateAll(exams, rooms, teachers, roles, allocations);
       pushOperationLog(
         lang === 'pt'
           ? `Plano gerado: ${planningResult.allocations.length} alocações.`
@@ -408,11 +408,6 @@ export default function App() {
       );
 
       setOperationProgress(35);
-      await waitForUiTick();
-
-      pushOperationLog(lang === 'pt' ? 'A limpar alocações antigas...' : 'Clearing previous allocations...');
-      await api.allocations.clearAll();
-      setOperationProgress(45);
       await waitForUiTick();
 
       const total = planningResult.allocations.length;
@@ -423,7 +418,7 @@ export default function App() {
       for (let i = 0; i < total; i++) {
         await api.allocations.save(planningResult.allocations[i]);
         if ((i + 1) % 10 === 0 || i === total - 1) {
-          const persistedProgress = 45 + Math.round(((i + 1) / Math.max(total, 1)) * 45);
+          const persistedProgress = 35 + Math.round(((i + 1) / Math.max(total, 1)) * 65);
           setOperationProgress(persistedProgress);
           pushOperationLog(
             lang === 'pt'

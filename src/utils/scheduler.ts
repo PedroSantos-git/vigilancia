@@ -589,37 +589,74 @@ export function autoAllocateAll(
   exams: Exam[],
   rooms: Room[],
   teachers: Teacher[],
-  roles: TeacherRole[] = []
+  roles: TeacherRole[] = [],
+  existingAllocations: Allocation[] = []
 ): AllocationResult {
   const pairs = getSortedPairs(exams, rooms);
   const targetAllocationByKey = new Map<string, Allocation>();
   const warnings: string[] = [];
   const notifications: Array<{ teacherId: string; message: string }> = [];
+  const examById = new Map(exams.map(e => [e.id, e]));
   const dayBusy = new Set<string>();
   const assignmentCounts = new Map<string, number>();
+
+  // Initialize from existing allocations
+  existingAllocations.forEach(alloc => {
+    const ex = examById.get(alloc.examId);
+    if (!ex) return;
+    const period = getPeriodFromTime(ex.time);
+    if (alloc.invigilator1Id) {
+      dayBusy.add(`${alloc.invigilator1Id}@@${ex.date}@@${period}`);
+      assignmentCounts.set(alloc.invigilator1Id, (assignmentCounts.get(alloc.invigilator1Id) || 0) + 1);
+    }
+    if (alloc.invigilator2Id) {
+      dayBusy.add(`${alloc.invigilator2Id}@@${ex.date}@@${period}`);
+      assignmentCounts.set(alloc.invigilator2Id, (assignmentCounts.get(alloc.invigilator2Id) || 0) + 1);
+    }
+    if (alloc.substituteId) {
+      dayBusy.add(`${alloc.substituteId}@@${ex.date}@@${period}`);
+      assignmentCounts.set(alloc.substituteId, (assignmentCounts.get(alloc.substituteId) || 0) + 1);
+    }
+  });
 
   const rolePriorityById = buildRolePriorityMap(roles);
   const basePool = teachers.filter(teacher => teacher.available && hasNoSpecialRole(teacher));
   const cargoPool = teachers.filter(teacher => teacher.available && hasSpecialRole(teacher));
-  teachers.filter(t => t.available).forEach(teacher => assignmentCounts.set(teacher.id, 0));
+  teachers.filter(t => t.available).forEach(teacher => {
+    if (!assignmentCounts.has(teacher.id)) {
+      assignmentCounts.set(teacher.id, 0);
+    }
+  });
 
   for (const pair of pairs) {
     const key = allocationKey(pair.exam.id, pair.room.id);
+    const existingAlloc = existingAllocations.find(a => a.examId === pair.exam.id && a.roomId === pair.room.id);
     targetAllocationByKey.set(key, {
       id: `${pair.exam.id}_${pair.room.id}`,
       examId: pair.exam.id,
       roomId: pair.room.id,
-      invigilator1Id: null,
-      invigilator2Id: null,
-      substituteId: null
+      invigilator1Id: existingAlloc?.invigilator1Id || null,
+      invigilator2Id: existingAlloc?.invigilator2Id || null,
+      substituteId: existingAlloc?.substituteId || null
     });
   }
 
+  // Calculate remaining slots to fill
+  let existingAssignedCount = 0;
+  for (const pair of pairs) {
+    const key = allocationKey(pair.exam.id, pair.room.id);
+    const alloc = targetAllocationByKey.get(key)!;
+    if (alloc.invigilator1Id) existingAssignedCount++;
+    if (alloc.invigilator2Id) existingAssignedCount++;
+    if (alloc.substituteId) existingAssignedCount++;
+  }
   const totalAssignmentsNeeded = pairs.length * 3;
+  const remainingSlots = totalAssignmentsNeeded - existingAssignedCount;
   const availableTeachersCount = Math.max(basePool.length, 1);
-  const maxAssignmentsPerTeacher = Math.ceil(totalAssignmentsNeeded / availableTeachersCount);
+  const maxExisting = existingAssignedCount > 0 ? Math.max(0, ...Array.from(assignmentCounts.values())) : 0;
+  const maxAssignmentsPerTeacher = Math.ceil(remainingSlots / availableTeachersCount) + maxExisting;
   warnings.push(
-    `Máximo de vigilâncias por docente: ${maxAssignmentsPerTeacher} (${totalAssignmentsNeeded} vagas para ${basePool.length} docentes elegíveis).`
+    `Máximo de vigilâncias por docente: ${maxAssignmentsPerTeacher} (${totalAssignmentsNeeded} vagas totais, ${existingAssignedCount} já atribuídas, ${remainingSlots} restantes para ${basePool.length} docentes elegíveis).`
   );
 
   const eeTeachers = basePool

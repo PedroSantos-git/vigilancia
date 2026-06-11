@@ -477,7 +477,8 @@ export default function ReportManager({
       // Now draw substitutes for this slot at the end
       if (slotSubstitutes.size > 0) {
         // Check if we need a new page for substitutes
-        const estimatedSubHeight = 20 + (slotSubstitutes.size * 10);
+        const numSubs = slotSubstitutes.size;
+        const estimatedSubHeight = 20 + (numSubs * 10) + ((numSubs - 1) * 4);
         if (currentY + estimatedSubHeight > 270) {
           doc.addPage();
           globalPageCounter++;
@@ -496,11 +497,12 @@ export default function ReportManager({
         currentY += 16;
 
         // Draw each substitute
-        Array.from(slotSubstitutes).forEach(subId => {
+        const substitutesArray = Array.from(slotSubstitutes);
+        substitutesArray.forEach((subId, index) => {
           const sub = teacherById.get(subId);
           if (!sub) return;
 
-          if (currentY + 10 > 270) {
+          if (currentY + 14 > 270) {
             doc.addPage();
             globalPageCounter++;
             currentPageInSlot++;
@@ -523,6 +525,15 @@ export default function ReportManager({
           doc.setDrawColor(100, 100, 100);
           doc.line(120, currentY + 1, 190, currentY + 1);
           currentY += 10;
+
+          // Add separator between substitutes (except after last one)
+          if (index < substitutesArray.length - 1) {
+            doc.setDrawColor(180, 180, 180);
+            doc.setLineDash([1, 1]);
+            doc.line(15, currentY + 1, 190, currentY + 1);
+            doc.setLineDash([]);
+            currentY += 4;
+          }
         });
       }
 
