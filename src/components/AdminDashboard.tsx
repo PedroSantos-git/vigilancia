@@ -183,6 +183,7 @@ export default function AdminDashboard({
   // Find conflicts and coverage gaps
   const conflicts: string[] = [];
   const assignedTwiceMap = new Map<string, Array<{ examId: string; roomId: string; label: string }>>();
+  const teacherDayPeriods = new Map<string, Set<string>>();
 
   const addTeacherSlotCheck = (
     teacherId: string | null,
@@ -223,6 +224,11 @@ export default function AdminDashboard({
 
     const period = getPeriodFromTime(examObj.time);
     const periodKey = `${teacherId}@@${examObj.date}@@${period}`;
+    const dayKey = `${teacherId}@@${examObj.date}`;
+    if (!teacherDayPeriods.has(dayKey)) {
+      teacherDayPeriods.set(dayKey, new Set());
+    }
+    teacherDayPeriods.get(dayKey)!.add(period);
     if (!assignedTwiceMap.has(periodKey)) {
       assignedTwiceMap.set(periodKey, []);
     }
@@ -292,6 +298,18 @@ export default function AdminDashboard({
           const r = rooms.find(room => room.id === p.roomId);
           return `${p.label} em ${r ? r.name : 'Desconhecida'}`;
         }).join(', ')}) no mesmo período (${date}, ${periodLabel})!`
+      );
+    }
+  });
+
+  teacherDayPeriods.forEach((periods, key) => {
+    if (!periods.has('09:00') || !periods.has('14:00')) return;
+    const teacherId = key.split('@@')[0];
+    const date = key.split('@@')[1];
+    const tchr = teachers.find(p => p.id === teacherId);
+    if (tchr) {
+      conflicts.push(
+        `${tchr.name} está alocado de manhã e de tarde no dia ${date}.`
       );
     }
   });

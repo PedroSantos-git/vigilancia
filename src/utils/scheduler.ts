@@ -186,6 +186,19 @@ function getSortedPairs(exams: Exam[], rooms: Room[]): Array<{ exam: Exam; room:
   return pairs;
 }
 
+function getOtherPeriod(period: "09:00" | "14:00"): "09:00" | "14:00" {
+  return period === "09:00" ? "14:00" : "09:00";
+}
+
+function filterTeachersForExamSlot(
+  candidates: Teacher[],
+  exam: Exam,
+  restrictEeToEeExams: boolean
+): Teacher[] {
+  if (!restrictEeToEeExams || exam.EE) return candidates;
+  return candidates.filter(teacher => !teacher.EE);
+}
+
 function canAssignTeacherToSlot(
   teacher: Teacher,
   exam: Exam,
@@ -195,12 +208,14 @@ function canAssignTeacherToSlot(
   assignmentCounts: Map<string, number>,
   maxAssignmentsPerTeacher: number
 ): boolean {
+  const period = getPeriodFromTime(exam.time);
   const alreadyInRoom = new Set([alloc.invigilator1Id, alloc.invigilator2Id, alloc.substituteId]);
 
   if (alreadyInRoom.has(teacher.id)) return false;
   if (hasSubjectConflict(teacher, exam)) return false;
   if (isTeacherUnavailableAt(teacher, exam.date, exam.time, exam)) return false;
-  if (dayBusy.has(`${teacher.id}@@${exam.date}`)) return false;
+  if (dayBusy.has(`${teacher.id}@@${exam.date}@@${period}`)) return false;
+  if (dayBusy.has(`${teacher.id}@@${exam.date}@@${getOtherPeriod(period)}`)) return false;
   if (teacher.PISO_ZERO && !isFloorZero(room)) return false;
   if (getAssignmentCount(assignmentCounts, teacher.id) >= maxAssignmentsPerTeacher) return false;
   return true;
@@ -233,7 +248,8 @@ function assignTeacherToSlot(
   labelSuffix = ""
 ): void {
   alloc[role] = teacher.id;
-  dayBusy.add(`${teacher.id}@@${exam.date}`);
+  const period = getPeriodFromTime(exam.time);
+  dayBusy.add(`${teacher.id}@@${exam.date}@@${period}`);
   assignmentCounts.set(teacher.id, getAssignmentCount(assignmentCounts, teacher.id) + 1);
   notifications.push({
     teacherId: teacher.id,
@@ -249,14 +265,10 @@ function assignEeTeachersToExams(
   assignmentCounts: Map<string, number>,
   maxAssignmentsPerTeacher: number,
   warnings: string[],
-  notifications: Array<{ teacherId: string; message: string }>,
-  isSingleDayMode: boolean
+  notifications: Array<{ teacherId: string; message: string }>
 ): void {
   const eeExamIds = [...new Set(pairs.filter(pair => pair.exam.EE).map(pair => pair.exam.id))];
   if (eeExamIds.length === 0 || eeTeachers.length === 0) return;
-
-  // In single day mode, only assign EE teachers to EE exams (which is what this function already does!)
-  // So we don't need to change that part!
 
   let eeTeacherCursor = 0;
 
@@ -348,7 +360,8 @@ function assignRestrictedTeachers(
   dayBusy: Set<string>,
   assignmentCounts: Map<string, number>,
   maxAssignmentsPerTeacher: number,
-  notifications: Array<{ teacherId: string; message: string }>
+  notifications: Array<{ teacherId: string; message: string }>,
+  restrictEeToEeExams: boolean
 ): void {
   for (const teacher of restrictedTeachers) {
     const remainingSlots = maxAssignmentsPerTeacher - getAssignmentCount(assignmentCounts, teacher.id);
@@ -365,6 +378,7 @@ function assignRestrictedTeachers(
       const candidatePairs = shuffle(pairs).filter(pair => {
         const alloc = targetAllocationByKey.get(allocationKey(pair.exam.id, pair.room.id));
         if (!alloc || alloc[currentRole]) return false;
+        if (restrictEeToEeExams && !pair.exam.EE && teacher.EE) return false;
         return canAssignTeacherToSlot(
           teacher,
           pair.exam,
@@ -408,7 +422,8 @@ function assignCargoTeachers(
   assignmentCounts: Map<string, number>,
   maxAssignmentsPerTeacher: number,
   warnings: string[],
-  notifications: Array<{ teacherId: string; message: string }>
+  notifications: Array<{ teacherId: string; message: string }>,
+  restrictEeToEeExams: boolean
 ): void {
   for (const role of ALLOCATION_ROLES) {
     let usedInRound = new Set<string>();
@@ -430,6 +445,7 @@ function assignCargoTeachers(
         )
       );
 
+      candidates = filterTeachersForExamSlot(candidates, pair.exam, restrictEeToEeExams);
       candidates = prioritizePisoZero(candidates, pair.room);
 
       let pool = candidates.filter(teacher => !usedInRound.has(teacher.id));
@@ -479,7 +495,8 @@ function assignGenericTeachers(
   assignmentCounts: Map<string, number>,
   maxAssignmentsPerTeacher: number,
   warnings: string[],
-  notifications: Array<{ teacherId: string; message: string }>
+  notifications: Array<{ teacherId: string; message: string }>,
+  restrictEeToEeExams: boolean
 ): void {
   for (const role of ALLOCATION_ROLES) {
     let usedInRound = new Set<string>();
@@ -501,6 +518,7 @@ function assignGenericTeachers(
         )
       );
 
+      candidates = filterTeachersForExamSlot(candidates, pair.exam, restrictEeToEeExams);
       candidates = prioritizePisoZero(candidates, pair.room);
 
       let pool = candidates.filter(teacher => !usedInRound.has(teacher.id));
@@ -608,16 +626,17 @@ export function autoAllocateAll(
   existingAllocations.forEach(alloc => {
     const ex = examById.get(alloc.examId);
     if (!ex) return;
+    const period = getPeriodFromTime(ex.time);
     if (alloc.invigilator1Id) {
-      dayBusy.add(`${alloc.invigilator1Id}@@${ex.date}`);
+      dayBusy.add(`${alloc.invigilator1Id}@@${ex.date}@@${period}`);
       assignmentCounts.set(alloc.invigilator1Id, (assignmentCounts.get(alloc.invigilator1Id) || 0) + 1);
     }
     if (alloc.invigilator2Id) {
-      dayBusy.add(`${alloc.invigilator2Id}@@${ex.date}`);
+      dayBusy.add(`${alloc.invigilator2Id}@@${ex.date}@@${period}`);
       assignmentCounts.set(alloc.invigilator2Id, (assignmentCounts.get(alloc.invigilator2Id) || 0) + 1);
     }
     if (alloc.substituteId) {
-      dayBusy.add(`${alloc.substituteId}@@${ex.date}`);
+      dayBusy.add(`${alloc.substituteId}@@${ex.date}@@${period}`);
       assignmentCounts.set(alloc.substituteId, (assignmentCounts.get(alloc.substituteId) || 0) + 1);
     }
   });
@@ -674,6 +693,8 @@ export function autoAllocateAll(
   const restrictedTeachers = basePool.filter(teacher => restrictedTeacherIds.has(teacher.id));
   const genericPool = basePool.filter(teacher => !restrictedTeacherIds.has(teacher.id));
 
+  const restrictEeToEeExams = Boolean(onlyDate);
+
   // Fase 1: EE por exame (Vigilante 1 EE obrigatório na 1.ª sala; suplente EE opcional)
   assignEeTeachersToExams(
     pairs,
@@ -683,8 +704,7 @@ export function autoAllocateAll(
     assignmentCounts,
     maxAssignmentsPerTeacher,
     warnings,
-    notifications,
-    Boolean(onlyDate)
+    notifications
   );
 
   // Fase 2: docentes com indisponibilidades/restrições
@@ -695,7 +715,8 @@ export function autoAllocateAll(
     dayBusy,
     assignmentCounts,
     maxAssignmentsPerTeacher,
-    notifications
+    notifications,
+    restrictEeToEeExams
   );
 
   // Fase 3: atribuição genérica (Vigilante 1 -> Vigilante 2 -> Suplente)
@@ -707,7 +728,8 @@ export function autoAllocateAll(
     assignmentCounts,
     maxAssignmentsPerTeacher,
     warnings,
-    notifications
+    notifications,
+    restrictEeToEeExams
   );
 
   // Fase 4: docentes com cargo (available), por ordem de prioridade do cargo (maior primeiro)
@@ -721,7 +743,8 @@ export function autoAllocateAll(
       assignmentCounts,
       maxAssignmentsPerTeacher,
       warnings,
-      notifications
+      notifications,
+      restrictEeToEeExams
     );
   } else {
     for (const pair of pairs) {
@@ -768,9 +791,10 @@ export function autoAllocate(
   allAllocations.forEach(alloc => {
     const ex = examById.get(alloc.examId);
     if (!ex) return;
-    if (alloc.invigilator1Id) dayBusy.add(`${alloc.invigilator1Id}@@${ex.date}`);
-    if (alloc.invigilator2Id) dayBusy.add(`${alloc.invigilator2Id}@@${ex.date}`);
-    if (alloc.substituteId) dayBusy.add(`${alloc.substituteId}@@${ex.date}`);
+    const period = getPeriodFromTime(ex.time);
+    if (alloc.invigilator1Id) dayBusy.add(`${alloc.invigilator1Id}@@${ex.date}@@${period}`);
+    if (alloc.invigilator2Id) dayBusy.add(`${alloc.invigilator2Id}@@${ex.date}@@${period}`);
+    if (alloc.substituteId) dayBusy.add(`${alloc.substituteId}@@${ex.date}@@${period}`);
   });
 
   const assignmentCounts = new Map<string, number>();
@@ -822,6 +846,8 @@ export function autoAllocate(
   const restrictedTeachers = basePool.filter(teacher => teacher.unavailabilities && teacher.unavailabilities.length > 0);
   const genericPool = basePool.filter(teacher => !restrictedTeachers.some(t => t.id === teacher.id));
 
+  const restrictEeToEeExams = !exam.EE;
+
   assignEeTeachersToExams(
     pairs,
     eeTeachers,
@@ -830,8 +856,7 @@ export function autoAllocate(
     assignmentCounts,
     maxAssignmentsPerTeacher,
     warnings,
-    notifications,
-    false
+    notifications
   );
 
   assignRestrictedTeachers(
@@ -841,7 +866,8 @@ export function autoAllocate(
     dayBusy,
     assignmentCounts,
     maxAssignmentsPerTeacher,
-    notifications
+    notifications,
+    restrictEeToEeExams
   );
 
   assignGenericTeachers(
@@ -852,7 +878,8 @@ export function autoAllocate(
     assignmentCounts,
     maxAssignmentsPerTeacher,
     warnings,
-    notifications
+    notifications,
+    restrictEeToEeExams
   );
 
   if (cargoPool.length > 0) {
@@ -865,7 +892,8 @@ export function autoAllocate(
       assignmentCounts,
       maxAssignmentsPerTeacher,
       warnings,
-      notifications
+      notifications,
+      restrictEeToEeExams
     );
   } else {
     for (const pair of pairs) {

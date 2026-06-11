@@ -382,7 +382,15 @@ export default function App() {
     await waitForUiTick();
 
     try {
-      pushOperationLog(lang === 'pt' ? 'A gerar plano global (EE -> Restrições -> Genérica -> Cargos)...' : 'Building global plan (EE -> Restrictions -> Generic -> Roles)...');
+      pushOperationLog(
+        onlyDate
+          ? (lang === 'pt'
+              ? `Modo dia específico (${onlyDate}): EE reservado a exames EE; sem manhã+tarde no mesmo docente.`
+              : `Single-day mode (${onlyDate}): EE teachers reserved for EE exams; no morning+afternoon same teacher.`)
+          : (lang === 'pt'
+              ? 'Modo todos os dias: EE primeiro em todos os exames EE, depois procedimento normal.'
+              : 'All-days mode: EE first on all EE exams, then normal procedure.')
+      );
       setOperationProgress(20);
       await waitForUiTick();
 
@@ -424,7 +432,15 @@ export default function App() {
         pushOperationLog(warning, 'warn');
       }
 
-      setAllocations(planningResult.allocations);
+      if (onlyDate) {
+        const examIdsOnDate = new Set(exams.filter(e => e.date === onlyDate).map(e => e.id));
+        setAllocations(prev => {
+          const kept = prev.filter(a => !examIdsOnDate.has(a.examId));
+          return [...kept, ...planningResult.allocations];
+        });
+      } else {
+        setAllocations(planningResult.allocations);
+      }
       setOperationProgress(100);
       finishOperation(
         'done',
