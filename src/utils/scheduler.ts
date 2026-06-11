@@ -192,7 +192,7 @@ function getOtherPeriod(period: "09:00" | "14:00"): "09:00" | "14:00" {
 
 /** Exame que requer vigilante EE (campo EE ou modalidade EE). */
 export function isEeExam(exam: Exam): boolean {
-  return exam.EE === true;
+  return exam.EE === true || normalizeText(exam.modality) === "ee";
 }
 
 function buildTeacherById(teachers: Teacher[]): Map<string, Teacher> {
@@ -205,33 +205,11 @@ function getEeTeacherPool(teachers: Teacher[], includeCargo: boolean): Teacher[]
   );
 }
 
-function clearTeacherFromSlot(
-  alloc: Allocation,
-  role: AllocationRoleKey,
-  exam: Exam,
-  dayBusy: Set<string>,
-  assignmentCounts: Map<string, number>
-): void {
-  const teacherId = alloc[role];
-  if (!teacherId) return;
-  alloc[role] = null;
-  const period = getPeriodFromTime(exam.time);
-  dayBusy.delete(`${teacherId}@@${exam.date}@@${period}`);
-  const count = getAssignmentCount(assignmentCounts, teacherId);
-  if (count > 0) {
-    assignmentCounts.set(teacherId, count - 1);
-  }
-}
-
 function needsEeVigilante1(
   alloc: Allocation,
-  exam: Exam,
-  teacherById: Map<string, Teacher>
+  exam: Exam
 ): boolean {
-  if (!isEeExam(exam)) return false;
-  if (!alloc.invigilator1Id) return true;
-  const current = teacherById.get(alloc.invigilator1Id);
-  return !current || !current.EE;
+  return isEeExam(exam) && !alloc.invigilator1Id;
 }
 
 function filterTeachersForExamSlot(
@@ -443,11 +421,29 @@ function assignEeTeachersToExams(
     const alloc = targetAllocationByKey.get(key);
     if (!alloc) continue;
 
-    if (!needsEeVigilante1(alloc, pair.exam, teacherById)) continue;
-
     if (alloc.invigilator1Id) {
-      clearTeacherFromSlot(alloc, "invigilator1Id", pair.exam, dayBusy, assignmentCounts);
+      const existing = teacherById.get(alloc.invigilator1Id);
+      if (!existing || !existing.EE) {
+        warnings.push(
+          `Exame EE ${pair.exam.name} (${pair.exam.date}): Vigilante 1 na ${pair.room.name} já está atribuído a não EE; alocação existente mantida.`
+        );
+      }
+      if (onlyDate) {
+        for (const role of ["invigilator2Id", "substituteId"] as const) {
+          const roleTeacherId = alloc[role];
+          if (!roleTeacherId) continue;
+          const roleTeacher = teacherById.get(roleTeacherId);
+          if (roleTeacher?.EE) {
+            warnings.push(
+              `Modo dia específico (${pair.exam.date}): ${ROLE_LABEL_PT[role]} na ${pair.room.name} (${pair.exam.name}) está atribuído a docente EE; alocação existente mantida.`
+            );
+          }
+        }
+      }
+      continue;
     }
+
+    if (!needsEeVigilante1(alloc, pair.exam)) continue;
 
     let selected = pickEeTeacher(
       eeTeachersRegular,
@@ -461,45 +457,6 @@ function assignEeTeachersToExams(
       new Set(),
       { mandatoryV1: true }
     );
-
-    // If no teacher found, try to free up an EE teacher who's already assigned to another role that day
-    if (!selected) {
-      const period = getPeriodFromTime(pair.exam.time);
-      // Iterate over all pairs to find any EE teacher assigned to a non-Vigilante-1 role on that day
-      for (const checkPair of pairs) {
-        if (selected) break;
-        const checkKey = allocationKey(checkPair.exam.id, checkPair.room.id);
-        const checkAlloc = targetAllocationByKey.get(checkKey);
-        if (!checkAlloc) continue;
-        // Check Vigilante 2 and Substitute
-        for (const checkRole of ["invigilator2Id", "substituteId"] as const) {
-          if (selected) break;
-          const checkTeacherId = checkAlloc[checkRole];
-          if (!checkTeacherId) continue;
-          const checkTeacher = teacherById.get(checkTeacherId);
-          if (!checkTeacher || !checkTeacher.EE) continue;
-          // Check if this teacher can be assigned to our slot
-          const excludeIds = new Set();
-          const tempSelected = pickEeTeacher(
-            [checkTeacher],
-            [],
-            pair.exam,
-            pair.room,
-            alloc,
-            dayBusy,
-            assignmentCounts,
-            maxAssignmentsPerTeacher,
-            excludeIds,
-            { mandatoryV1: true }
-          );
-          if (tempSelected) {
-            // Free them up!
-            clearTeacherFromSlot(checkAlloc, checkRole, checkPair.exam, dayBusy, assignmentCounts);
-            selected = tempSelected;
-          }
-        }
-      }
-    }
 
     if (!selected) {
       warnings.push(
@@ -576,16 +533,16 @@ function assignRemainingEeTeachers(
   );
   if (eeTeachersRegular.length === 0 && eeTeachersWithCargo.length === 0) return;
 
-  const teacherById = buildTeacherById(teachers);
-
   // Reforço: Vigilante 1 EE em exames EE que ainda não tenham docente EE
   for (const pair of pairs.filter(p => isEeExam(p.exam))) {
     const alloc = targetAllocationByKey.get(allocationKey(pair.exam.id, pair.room.id));
-    if (!alloc || !needsEeVigilante1(alloc, pair.exam, teacherById)) continue;
+    if (!alloc) continue;
 
     if (alloc.invigilator1Id) {
-      clearTeacherFromSlot(alloc, "invigilator1Id", pair.exam, dayBusy, assignmentCounts);
+      continue;
     }
+
+    if (!needsEeVigilante1(alloc, pair.exam)) continue;
 
     const selected = pickEeTeacher(
       eeTeachersRegular,
@@ -1015,27 +972,6 @@ export function autoAllocateAll(
     });
   }
 
-  console.log("=== [STEP 0] Libertar docentes EE de exames não EE ===");
-  const teacherById = buildTeacherById(teachers);
-  for (const pair of pairs) {
-    const key = allocationKey(pair.exam.id, pair.room.id);
-    const alloc = targetAllocationByKey.get(key);
-    if (!alloc) continue;
-    if (!isEeExam(pair.exam)) {
-      // Clear any EE teachers from non-EE exams to free them up
-      for (const role of ALLOCATION_ROLES) {
-        const teacherId = alloc[role];
-        if (teacherId) {
-          const teacher = teacherById.get(teacherId);
-          if (teacher && teacher.EE) {
-            console.log(`- Libertar docente EE: ${teacher.name} (${teacher.id}) do papel ${role} no exame ${pair.exam.name} (sala ${pair.room.name})`);
-            clearTeacherFromSlot(alloc, role, pair.exam, dayBusy, assignmentCounts);
-          }
-        }
-      }
-    }
-  }
-
   // Calculate remaining slots to fill
   let existingAssignedCount = 0;
   for (const pair of pairs) {
@@ -1221,26 +1157,6 @@ export function autoAllocate(
     if (alloc.invigilator1Id) assignedCount++;
     if (alloc.invigilator2Id) assignedCount++;
     if (alloc.substituteId) assignedCount++;
-  }
-
-  // Step 0 for single exam: Free up EE teachers if this isn't an EE exam, or make sure they are available for EE exams
-  const teacherByIdSingle = buildTeacherById(teachers);
-  for (const pair of pairs) {
-    const key = allocationKey(pair.exam.id, pair.room.id);
-    const alloc = targetAllocationByKey.get(key);
-    if (!alloc) continue;
-    if (!isEeExam(pair.exam)) {
-      // Clear any EE teachers from non-EE exams
-      for (const role of ALLOCATION_ROLES) {
-        const teacherId = alloc[role];
-        if (teacherId) {
-          const teacher = teacherByIdSingle.get(teacherId);
-          if (teacher && teacher.EE) {
-            clearTeacherFromSlot(alloc, role, pair.exam, dayBusy, assignmentCounts);
-          }
-        }
-      }
-    }
   }
 
   const remainingSlots = (pairs.length * 3) - assignedCount;
