@@ -538,7 +538,46 @@ function assignRemainingEeTeachers(
   for (const role of ALLOCATION_ROLES) {
     let usedInRound = new Set<string>();
 
-    for (const pair of pairs) {
+    // First process all EE exam slots
+    const eePairs = pairs.filter(pair => isEeExam(pair.exam));
+    for (const pair of eePairs) {
+      const key = allocationKey(pair.exam.id, pair.room.id);
+      const alloc = targetAllocationByKey.get(key);
+      if (!alloc || alloc[role]) continue;
+
+      if (!canAssignEeTeacherToEeExamSlot(pair.exam, role, onlyDate)) continue;
+
+      const excludeIds = new Set([alloc.invigilator1Id, alloc.invigilator2Id, alloc.substituteId]);
+      const selected = pickEeTeacher(
+        eeTeachersRegular,
+        eeTeachersWithCargo,
+        pair.exam,
+        pair.room,
+        alloc,
+        dayBusy,
+        assignmentCounts,
+        maxAssignmentsPerTeacher,
+        excludeIds
+      );
+      if (!selected) continue;
+
+      assignTeacherToSlot(
+        selected,
+        alloc,
+        role,
+        pair.exam,
+        pair.room,
+        dayBusy,
+        assignmentCounts,
+        notifications,
+        hasNoSpecialRole(selected) ? " (EE)" : " (EE/cargo)"
+      );
+      usedInRound.add(selected.id);
+    }
+
+    // Then process non-EE exam slots
+    const nonEePairs = pairs.filter(pair => !isEeExam(pair.exam));
+    for (const pair of nonEePairs) {
       const key = allocationKey(pair.exam.id, pair.room.id);
       const alloc = targetAllocationByKey.get(key);
       if (!alloc || alloc[role]) continue;
@@ -876,6 +915,26 @@ export function autoAllocateAll(
     });
   }
 
+  // Step 0: Free up EE teachers from non-EE exams for the dates we're processing, so they can be assigned to EE exams first
+  const teacherById = buildTeacherById(teachers);
+  for (const pair of pairs) {
+    const key = allocationKey(pair.exam.id, pair.room.id);
+    const alloc = targetAllocationByKey.get(key);
+    if (!alloc) continue;
+    if (!isEeExam(pair.exam)) {
+      // Clear any EE teachers from non-EE exams to free them up
+      for (const role of ALLOCATION_ROLES) {
+        const teacherId = alloc[role];
+        if (teacherId) {
+          const teacher = teacherById.get(teacherId);
+          if (teacher && teacher.EE) {
+            clearTeacherFromSlot(alloc, role, pair.exam, dayBusy, assignmentCounts);
+          }
+        }
+      }
+    }
+  }
+
   // Calculate remaining slots to fill
   let existingAssignedCount = 0;
   for (const pair of pairs) {
@@ -905,7 +964,7 @@ export function autoAllocateAll(
   );
 
   const isOnlyDateMode = Boolean(onlyDate);
-  const restrictEeToNonEeExams = isOnlyDateMode;
+  const restrictEeToNonEeExams = true;
 
   // Fase 1: EE em exames EE (V1 em todas as salas; suplente EE opcional só em modo global)
   assignEeTeachersToExams(
@@ -1059,6 +1118,26 @@ export function autoAllocate(
     if (alloc.substituteId) assignedCount++;
   }
 
+  // Step 0 for single exam: Free up EE teachers if this isn't an EE exam, or make sure they are available for EE exams
+  const teacherByIdSingle = buildTeacherById(teachers);
+  for (const pair of pairs) {
+    const key = allocationKey(pair.exam.id, pair.room.id);
+    const alloc = targetAllocationByKey.get(key);
+    if (!alloc) continue;
+    if (!isEeExam(pair.exam)) {
+      // Clear any EE teachers from non-EE exams
+      for (const role of ALLOCATION_ROLES) {
+        const teacherId = alloc[role];
+        if (teacherId) {
+          const teacher = teacherByIdSingle.get(teacherId);
+          if (teacher && teacher.EE) {
+            clearTeacherFromSlot(alloc, role, pair.exam, dayBusy, assignmentCounts);
+          }
+        }
+      }
+    }
+  }
+
   const remainingSlots = (pairs.length * 3) - assignedCount;
   const maxAssignmentsPerTeacher =
     Math.ceil(remainingSlots / Math.max(basePool.length, 1)) +
@@ -1070,7 +1149,7 @@ export function autoAllocate(
   );
 
   const isOnlyDateMode = false;
-  const restrictEeToNonEeExams = !isEeExam(exam);
+  const restrictEeToNonEeExams = true;
 
   assignEeTeachersToExams(
     pairs,
