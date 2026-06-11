@@ -322,11 +322,16 @@ function emitUnfilledSlotWarnings(
 }
 
 function prioritizePisoZero(candidates: Teacher[], room: Room): Teacher[] {
+  console.log(`  [prioritizePisoZero] Sala: ${room.name}, isFloorZero: ${isFloorZero(room)}, Candidatos originais: ${candidates.map(t => t.name)}`);
   if (!isFloorZero(room)) {
-    return candidates.filter(teacher => !teacher.PISO_ZERO);
+    const filtered = candidates.filter(teacher => !teacher.PISO_ZERO);
+    console.log(`  → Filtrados (não piso zero): ${filtered.map(t => t.name)}`);
+    return filtered;
   }
   const pisoZeroCandidates = candidates.filter(teacher => teacher.PISO_ZERO);
-  return pisoZeroCandidates.length > 0 ? pisoZeroCandidates : candidates;
+  const result = pisoZeroCandidates.length > 0 ? pisoZeroCandidates : candidates;
+  console.log(`  → Resultado (piso zero): ${result.map(t => t.name)}`);
+  return result;
 }
 
 function pickLeastUsedRandom(candidates: Teacher[], assignmentCounts: Map<string, number>): Teacher | null {
