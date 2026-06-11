@@ -3,6 +3,10 @@
     {
       "source": "/api/auth/:nextauth*",
       "destination": "/api/auth/[...nextauth].js?nextauth=:nextauth*"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "/api/index.js"
     }
   ]
 }
