@@ -1,38 +1,70 @@
-# Regras de Atribuição de Vigilantes e Suplentes
+# Regras de Atribuição de Vigilantes e Suplentes (Implementação Atual)
 
-## Regras Gerais
-1. **Nunca apaga atribuições existentes**: O sistema sempre respeita as alocações já feitas anteriormente.
-2. **Máximo de vigilâncias por docente**: Calculado com base nas vagas restantes para preencher somando às atribuições já existentes e dividindo pelos docentes disponíveis (número inteiro superior ao numero)
-3. **Nunca mesmo docente no mesmo dia**: Um docente nunca pode ser alocado para mais do que um exame/vigilância no mesmo dia (nem de manhã e nem à tarde).
-4. **Nunca mesmo docente na mesma sala (exame/sala)**: Um docente não pode ocupar mais do que um papel (Vigilante 1, Vigilante 2, Suplente) na mesma alocação de exame/sala.
+## 1) Regras Estruturais (sempre ativas)
+1. **Não apagar atribuições existentes**  
+   O algoritmo não remove automaticamente uma atribuição já gravada para “abrir vaga”.
+2. **Um docente por dia**  
+   O mesmo docente não pode ficar atribuído no mesmo dia nem no período igual nem no período oposto.
+3. **Um docente por sala/escala**  
+   O mesmo docente não pode ocupar mais de um papel na mesma combinação exame+sala.
+4. **Conflito de disciplina**  
+   Docente não pode vigiar exame da sua disciplina/grupo disciplinar.
+5. **Disponibilidade**  
+   Só docentes com `available = true` entram no universo elegível.
+6. **Indisponibilidades registadas**  
+   Se o docente estiver indisponível para o slot do exame, não é elegível.
+7. **Docente `PISO_ZERO = true`**  
+   Só pode ser colocado em sala de piso 0/rés-do-chão.
+8. **Normalização de IDs inválidos de docente**  
+   Valores vazios, `"null"` e `"undefined"` são tratados como ausência de docente.
 
-## Outras Regras
-- **Conflito de Disciplina**: Um docente não pode ser alocado para um exame da sua disciplina (ou do seu grupo de disciplinas).
-- **Disponibilidade**: Apenas docentes marcados como `available = TRUE` são considerados para alocação.
+## 2) Cálculo do máximo de vigilâncias por docente
+- É calculado com base nas vagas totais no `scope` de execução (já preenchidas + por preencher).
+- Fórmula aplicada:
+  - `totalSlots`
+  - `maxAssignmentsPerTeacher = ceil(totalSlots / docentesElegíveisBase)`
+- O objetivo é equilibrar distribuição sem ignorar carga histórica.
 
-## Regras Específicas por Tipo de Docente
+## 3) Definição de Exame EE
+Um exame é tratado como EE quando:
+- `exam.EE === true`, **ou**
+- `exam.modality === "EE"` (normalizado).
 
-### 1. Docentes de Educação Especial (EE) - Para todos os exames de EE
-Quando a atribuição é feita para um dia específico (`onlyDate`)
-- **Obrigatório nas salas de exame de EE**: Cada exame de EE deve ter um docente de EE como Vigilante 1 em todas as suas sala.
-- **Os restantes, Vigilante 2 e Suplente não devem ser Docentes de EE.
-Quando a atribuição é feita para todas as datas e todos os exames com falta de vigilantes.
-- **Obrigatório nas salas de exame de EE**: Cada exame de EE deve ter um docente de EE como Vigilante 1 em todas as suas sala.
-- **Suplente opcional nas salas de exame de EE**: Se houver docentes de EE disponíveis (dentro do maximo de vigilancias por Docente), um deles pode ser alocado como Suplente nas salas de exame de EE.
+## 4) Regras EE (Educação Especial)
 
-### 2. Docentes com Piso Zero (PISO_ZERO = TRUE)
-- Apenas alocados em salas de piso 0 (ou rés-do-chão).
+### 4.1 Modo dia específico (`onlyDate`)
+1. **Obrigatório**: cada sala de exame EE deve ter docente EE em **Vigilante 1**.
+2. **Restrição**: docente EE **não** é usado em `Vigilante 2` nem `Suplente` de exame EE.
+3. Se já existir atribuição gravada em `Vigilante 1`, essa atribuição é mantida.
 
-### 3. Docentes com Indisponibilidades
-- Não são alocados para exames onde tenham registado indisponibilidade.
+### 4.2 Modo global (todas as datas no scope)
+1. **Obrigatório**: cada sala de exame EE deve ter docente EE em **Vigilante 1**.
+2. **Suplente EE opcional**: em exame EE, pode existir EE em `Suplente` quando houver elegibilidade/capacidade.
+3. Docente EE **nunca** é colocado em `Vigilante 2` de exame EE.
 
-### 4. Docentes com Cargos Especiais
-- São usados apenas se não houver docentes regulares disponíveis.
-- São selecionados por ordem de prioridade do cargo (maior prioridade primeiro).
+### 4.3 Prioridade EE em salas de piso 0
+Quando a sala é piso 0 e existem candidatos EE:
+1. O algoritmo tenta **primeiro** docentes EE com `PISO_ZERO = true`.
+2. Se nenhum desses for elegível, faz fallback para os restantes docentes EE elegíveis.
+3. Isto é uma **prioridade**, não exclusividade.
 
-## Ordem de Atribuição
-1. **Fase 1**: Atribuir docentes de EE a exames de EE (Vigilante 1 em todas as salas; Suplente EE opcional em modo global).
-2. **Fase 2**: Atribuir docentes com indisponibilidades (se houver slots adequados para eles).
-3. **Fase 3**: Atribuir docentes regulares (sem indisponibilidades, sem cargos especiais, não EE).
-4. **Fase 4**: Se ainda houver slots livres, usar docentes EE.
-5. **Fase 5**: Se ainda houver slots livres, usar docentes com cargos especiais (por ordem de prioridade do cargo).
+## 5) Regras de Piso 0 (comportamento global)
+1. Em sala **não piso 0**, docentes `PISO_ZERO=true` são excluídos.
+2. Em sala **piso 0**, podem ser usados docentes `PISO_ZERO=true` e também docentes sem essa limitação.
+3. Exceção de prioridade: em sala piso 0, dá-se prioridade a EE com `PISO_ZERO=true`.
+
+## 6) Docentes com cargos especiais
+1. Só entram após esgotar os docentes regulares nas fases anteriores.
+2. Seleção por prioridade de cargo (maior prioridade primeiro).
+
+## 7) Ordem de atribuição (pipeline)
+1. **Fase 1**: EE em exames EE  
+   - V1 EE obrigatório em todas as salas EE; suplente EE opcional apenas em modo global.
+2. **Fase 2**: Docentes com indisponibilidades (quando houver slots compatíveis).
+3. **Fase 3**: Docentes regulares (sem indisponibilidades, sem cargo, não EE).
+4. **Fase 4**: Docentes EE restantes para vagas livres (sem necessidade de manter restrições EE).
+5. **Fase 5**: Docentes com cargo por prioridade.
+
+## 8) Notas operacionais
+1. Se uma regra obrigatória não puder ser satisfeita (ex.: sem EE elegível para V1 em exame EE), o sistema emite aviso explícito.
+2. O sistema preserva consistência entre API e scheduler para IDs de docente inválidos.
