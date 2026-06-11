@@ -42,7 +42,7 @@ interface AdminDashboardProps {
   rooms: Room[];
   exams: Exam[];
   allocations: Allocation[];
-  onAutoTrigger: () => void;
+  onAutoTrigger: (date?: string) => void;
   onAutoTriggerRooms: () => void;
   onClearRooms: () => void;
   onClearAllocations: () => Promise<void> | void;
@@ -74,6 +74,13 @@ export default function AdminDashboard({
   const [isClearModalOpen, setIsClearModalOpen] = useState(false);
   const [confirmInput, setConfirmInput] = useState('');
 
+  // Auto Assign Modal State
+  const [isAutoAssignModalOpen, setIsAutoAssignModalOpen] = useState(false);
+  const [autoAssignMode, setAutoAssignMode] = useState<'all' | 'specific'>('all');
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [needsRoomConfirmation, setNeedsRoomConfirmation] = useState(false);
+  const [hasRoomWarning, setHasRoomWarning] = useState(false);
+
   const handleAskAI = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!aiPrompt.trim()) return;
@@ -99,6 +106,40 @@ export default function AdminDashboard({
     } finally {
       setIsAiLoading(false);
     }
+  };
+
+  const getExamDates = () => {
+    const dates = [...new Set(exams.map(e => e.date))].sort();
+    return dates;
+  };
+
+  const checkRooms = () => {
+    const examsToCheck = autoAssignMode === 'specific' && selectedDate 
+      ? exams.filter(e => e.date === selectedDate) 
+      : exams;
+    const examsWithoutRooms = examsToCheck.filter(e => !e.roomIds || e.roomIds.length === 0);
+    return examsWithoutRooms.length > 0;
+  };
+
+  const handleOpenAutoAssignModal = () => {
+    const dates = getExamDates();
+    setSelectedDate(dates[0] || '');
+    setAutoAssignMode('all');
+    setNeedsRoomConfirmation(false);
+    setHasRoomWarning(false);
+    setIsAutoAssignModalOpen(true);
+  };
+
+  const handleConfirmAutoAssign = () => {
+    const hasMissingRooms = checkRooms();
+    if (hasMissingRooms && !needsRoomConfirmation) {
+      setHasRoomWarning(true);
+      return;
+    }
+    // Proceed with auto assign
+    const dateToUse = autoAssignMode === 'specific' ? selectedDate : undefined;
+    onAutoTrigger(dateToUse);
+    setIsAutoAssignModalOpen(false);
   };
 
   // Logic Calculations
@@ -285,7 +326,7 @@ export default function AdminDashboard({
             <span>{lang === 'pt' ? 'Limpar salas' : 'Clear rooms'}</span>
           </button>
           <button
-            onClick={onAutoTrigger}
+            onClick={handleOpenAutoAssignModal}
             disabled={isSystemTaskRunning}
             className="flex items-center space-x-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition shadow shadow-indigo-900/10 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -359,6 +400,118 @@ export default function AdminDashboard({
                   {t.cancel}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Auto Assign Modal */}
+      {isAutoAssignModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-slate-200">
+            <div className="px-6 py-4 bg-indigo-50 border-b border-indigo-100 flex justify-between items-center">
+              <h3 className="font-bold text-indigo-800 text-sm flex items-center space-x-2">
+                <Users className="h-4 w-4" />
+                <span>{lang === 'pt' ? 'Atribuir vigilantes' : 'Assign invigilators'}</span>
+              </h3>
+              <button onClick={() => setIsAutoAssignModalOpen(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Mode selection */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-slate-700">
+                  {lang === 'pt' ? 'Escolha o período:' : 'Choose period:'}
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setAutoAssignMode('all')}
+                    className={`px-3 py-2 rounded-lg text-xs font-semibold transition ${
+                      autoAssignMode === 'all'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    {lang === 'pt' ? 'Todos os dias' : 'All days'}
+                  </button>
+                  <button
+                    onClick={() => setAutoAssignMode('specific')}
+                    className={`px-3 py-2 rounded-lg text-xs font-semibold transition ${
+                      autoAssignMode === 'specific'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    {lang === 'pt' ? 'Dia específico' : 'Specific day'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Date picker */}
+              {autoAssignMode === 'specific' && (
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-slate-700">
+                    {lang === 'pt' ? 'Selecione o dia:' : 'Select day:'}
+                  </label>
+                  <select
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
+                  >
+                    {getExamDates().map((date) => (
+                      <option key={date} value={date}>
+                        {date}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Room warning */}
+              {hasRoomWarning && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+                  <div className="flex items-center space-x-2 text-amber-800">
+                    <AlertTriangle className="h-4 w-4" />
+                    <span className="text-xs font-semibold">
+                      {lang === 'pt' ? 'Aviso: Exames sem salas atribuídas!' : 'Warning: Exams without assigned rooms!'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-amber-700">
+                    {lang === 'pt' 
+                      ? 'Alguns exames não têm salas atribuídas. Deseja continuar e atribuir vigilantes apenas aos exames que têm salas?' 
+                      : 'Some exams have no rooms assigned. Do you want to continue and assign invigilators only to exams that have rooms?'}
+                  </p>
+                  <button
+                    onClick={() => {
+                      setNeedsRoomConfirmation(true);
+                      handleConfirmAutoAssign();
+                    }}
+                    className="w-full py-2 rounded-lg text-xs font-semibold bg-amber-600 hover:bg-amber-500 text-white transition"
+                  >
+                    {lang === 'pt' ? 'Continuar mesmo assim' : 'Continue anyway'}
+                  </button>
+                </div>
+              )}
+
+              {!hasRoomWarning && (
+                <div className="flex flex-col space-y-2 pt-2">
+                  <button
+                    onClick={handleConfirmAutoAssign}
+                    className="w-full py-3 rounded-xl text-sm font-bold transition flex items-center justify-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20"
+                  >
+                    <Users className="h-4 w-4" />
+                    <span>{lang === 'pt' ? 'Atribuir vigilantes' : 'Assign invigilators'}</span>
+                  </button>
+                  <button
+                    onClick={() => setIsAutoAssignModalOpen(false)}
+                    className="w-full py-2.5 text-xs text-slate-500 hover:text-slate-800 font-medium transition"
+                  >
+                    {lang === 'pt' ? 'Cancelar' : 'Cancel'}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

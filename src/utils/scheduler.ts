@@ -590,9 +590,11 @@ export function autoAllocateAll(
   rooms: Room[],
   teachers: Teacher[],
   roles: TeacherRole[] = [],
-  existingAllocations: Allocation[] = []
+  existingAllocations: Allocation[] = [],
+  onlyDate?: string
 ): AllocationResult {
-  const pairs = getSortedPairs(exams, rooms);
+  const allPairs = getSortedPairs(exams, rooms);
+  const pairs = onlyDate ? allPairs.filter(p => p.exam.date === onlyDate) : allPairs;
   const targetAllocationByKey = new Map<string, Allocation>();
   const warnings: string[] = [];
   const notifications: Array<{ teacherId: string; message: string }> = [];
@@ -600,7 +602,7 @@ export function autoAllocateAll(
   const dayBusy = new Set<string>();
   const assignmentCounts = new Map<string, number>();
 
-  // Initialize from existing allocations
+  // Initialize from existing allocations (for all days, to track assignment counts)
   existingAllocations.forEach(alloc => {
     const ex = examById.get(alloc.examId);
     if (!ex) return;
@@ -628,7 +630,7 @@ export function autoAllocateAll(
     }
   });
 
-  for (const pair of pairs) {
+  for (const pair of allPairs) {
     const key = allocationKey(pair.exam.id, pair.room.id);
     const existingAlloc = existingAllocations.find(a => a.examId === pair.exam.id && a.roomId === pair.room.id);
     targetAllocationByKey.set(key, {

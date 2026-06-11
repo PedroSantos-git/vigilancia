@@ -373,25 +373,13 @@ export default function App() {
     }
   };
 
-  const handleAutoTriggerAll = async () => {
+  const handleAutoTriggerAll = async (onlyDate?: string) => {
     if (operationState.status === 'running') return;
 
     beginOperation(lang === 'pt' ? 'Atribuição Automática de Vigilâncias' : 'Automatic Invigilator Allocation');
-    pushOperationLog(lang === 'pt' ? 'A validar exames e salas associadas...' : 'Validating exams and assigned rooms...');
+    pushOperationLog(lang === 'pt' ? 'A iniciar processo de atribuição...' : 'Starting assignment process...');
     setOperationProgress(5);
     await waitForUiTick();
-
-    // Rule: All exams must have at least one room assigned
-    const examsWithoutRooms = exams.filter(ex => !ex.roomIds || ex.roomIds.length === 0);
-    if (examsWithoutRooms.length > 0) {
-      finishOperation(
-        'error',
-        lang === 'pt'
-          ? `Processo interrompido: ${examsWithoutRooms.length} exame(s) sem salas associadas.`
-          : `Process aborted: ${examsWithoutRooms.length} exam(s) without assigned rooms.`
-      );
-      return;
-    }
 
     try {
       pushOperationLog(lang === 'pt' ? 'A gerar plano global (EE -> Restrições -> Genérica -> Cargos)...' : 'Building global plan (EE -> Restrictions -> Generic -> Roles)...');
@@ -400,7 +388,7 @@ export default function App() {
 
       const rolesData = await api.roles.getAll();
       const roles = Array.isArray(rolesData) ? rolesData : [];
-      const planningResult = autoAllocateAll(exams, rooms, teachers, roles, allocations);
+      const planningResult = autoAllocateAll(exams, rooms, teachers, roles, allocations, onlyDate);
       pushOperationLog(
         lang === 'pt'
           ? `Plano gerado: ${planningResult.allocations.length} alocações.`
