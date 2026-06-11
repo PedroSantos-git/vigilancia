@@ -1,0 +1,38 @@
+# Regras de Atribuição de Vigilantes e Suplentes
+
+## Regras Gerais
+1. **Nunca apaga atribuições existentes**: O sistema sempre respeita as alocações já feitas anteriormente.
+2. **Máximo de vigilâncias por docente**: Calculado com base nas vagas restantes para preencher somando às atribuições já existentes e dividindo pelos docentes disponíveis (número inteiro superior ao numero)
+3. **Nunca mesmo docente no mesmo dia**: Um docente nunca pode ser alocado para mais do que um exame/vigilância no mesmo dia (nem de manhã e nem à tarde).
+4. **Nunca mesmo docente na mesma sala (exame/sala)**: Um docente não pode ocupar mais do que um papel (Vigilante 1, Vigilante 2, Suplente) na mesma alocação de exame/sala.
+
+## Outras Regras
+- **Conflito de Disciplina**: Um docente não pode ser alocado para um exame da sua disciplina (ou do seu grupo de disciplinas).
+- **Disponibilidade**: Apenas docentes marcados como `available = TRUE` são considerados para alocação.
+
+## Regras Específicas por Tipo de Docente
+
+### 1. Docentes de Educação Especial (EE) - Para todos os exames de EE
+Quando a atribuição é feita para um dia específico (`onlyDate`)
+- **Obrigatório nas salas de exame de EE**: Cada exame de EE deve ter um docente de EE como Vigilante 1 em todas as suas sala.
+- **Os restantes, Vigilante 2 e Suplente não devem ser Docentes de EE.
+Quando a atribuição é feita para todas as datas e todos os exames com falta de vigilantes.
+- **Obrigatório nas salas de exame de EE**: Cada exame de EE deve ter um docente de EE como Vigilante 1 em todas as suas sala.
+- **Suplente opcional nas salas de exame de EE**: Se houver docentes de EE disponíveis (dentro do maximo de vigilancias por Docente), um deles pode ser alocado como Suplente nas salas de exame de EE.
+
+### 2. Docentes com Piso Zero (PISO_ZERO = TRUE)
+- Apenas alocados em salas de piso 0 (ou rés-do-chão).
+
+### 3. Docentes com Indisponibilidades
+- Não são alocados para exames onde tenham registado indisponibilidade.
+
+### 4. Docentes com Cargos Especiais
+- São usados apenas se não houver docentes regulares disponíveis.
+- São selecionados por ordem de prioridade do cargo (maior prioridade primeiro).
+
+## Ordem de Atribuição
+1. **Fase 1**: Atribuir docentes de EE a exames de EE (Vigilante 1 em todas as salas; Suplente EE opcional em modo global).
+2. **Fase 2**: Atribuir docentes com indisponibilidades (se houver slots adequados para eles).
+3. **Fase 3**: Atribuir docentes regulares (sem indisponibilidades, sem cargos especiais, não EE).
+4. **Fase 4**: Se ainda houver slots livres, usar docentes EE.
+5. **Fase 5**: Se ainda houver slots livres, usar docentes com cargos especiais (por ordem de prioridade do cargo).

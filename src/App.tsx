@@ -385,11 +385,11 @@ export default function App() {
       pushOperationLog(
         onlyDate
           ? (lang === 'pt'
-              ? `Modo dia específico (${onlyDate}): EE reservado a exames EE; sem manhã+tarde no mesmo docente.`
-              : `Single-day mode (${onlyDate}): EE teachers reserved for EE exams; no morning+afternoon same teacher.`)
+              ? `Modo dia específico (${onlyDate}): V1 EE em todas as salas EE; V2/Suplente sem EE; 1 vigilância/dia/docente.`
+              : `Single-day mode (${onlyDate}): EE as V1 in all EE rooms; V2/Sub not EE; 1 invigilation/day/teacher.`)
           : (lang === 'pt'
-              ? 'Modo todos os dias: EE primeiro em todos os exames EE, depois procedimento normal.'
-              : 'All-days mode: EE first on all EE exams, then normal procedure.')
+              ? 'Modo global: Fases EE → Restrições → Regulares → EE restante → Cargos.'
+              : 'Global mode: Phases EE → Restrictions → Regular → Remaining EE → Roles.')
       );
       setOperationProgress(20);
       await waitForUiTick();

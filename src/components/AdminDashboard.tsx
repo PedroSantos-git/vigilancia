@@ -266,21 +266,18 @@ export default function AdminDashboard({
         addTeacherSlotCheck(alloc.substituteId, 'Suplente', examObj, roomObj);
       });
 
-      if (examObj.EE && examRooms.length > 0) {
-        const firstRoom = [...examRooms].sort((a, b) => {
-          if (a.priority !== b.priority) return a.priority - b.priority;
-          return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
-        })[0];
-        const firstAlloc = findAllocationForExamRoom(allocations, examObj.id, firstRoom.id, rooms);
-        if (firstAlloc) {
-          const v1 = teachers.find(t => t.id === firstAlloc.invigilator1Id);
-          if (firstAlloc.invigilator1Id && v1 && !v1.EE) {
-            conflicts.push(`Exame EE ${examObj.name}: Vigilante 1 na ${firstRoom.name} não é docente EE.`);
+      if (examObj.EE) {
+        examRooms.forEach(roomObj => {
+          const eeAlloc = findAllocationForExamRoom(allocations, examObj.id, roomObj.id, rooms);
+          if (!eeAlloc) return;
+          const v1 = teachers.find(t => t.id === eeAlloc.invigilator1Id);
+          if (eeAlloc.invigilator1Id && v1 && !v1.EE) {
+            conflicts.push(`Exame EE ${examObj.name}: Vigilante 1 na ${roomObj.name} não é docente EE.`);
           }
-          if (!firstAlloc.invigilator1Id) {
-            conflicts.push(`Exame EE ${examObj.name}: falta Vigilante 1 EE na primeira sala (${firstRoom.name}).`);
+          if (!eeAlloc.invigilator1Id) {
+            conflicts.push(`Exame EE ${examObj.name}: falta Vigilante 1 EE na ${roomObj.name}.`);
           }
-        }
+        });
       }
     });
   }
